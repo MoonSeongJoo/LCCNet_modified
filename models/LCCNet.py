@@ -1,3 +1,4 @@
+
 # -------------------------------------------------------------------
 # Copyright (C) 2020 Harbin Institute of Technology, China
 # Author: Xudong Lv (15B901019@hit.edu.cn)
@@ -30,7 +31,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '1'
 
 # from .networks.submodules import *
 # from .networks.correlation_package.correlation import Correlation
-from models.correlation_package.correlation import Correlation
+#from models.correlation_package.correlation import Correlation
 
 
 
@@ -291,6 +292,7 @@ class LCCNet(nn.Module):
         self.layer3_lidar = self._make_layer(block, 256, layers[2], stride=2)
         self.layer4_lidar = self._make_layer(block, 512, layers[3], stride=2)
 
+        # TODO : change correlation to correspendence Transformer algorithm
         self.corr = Correlation(pad_size=md, kernel_size=1, max_displacement=md, stride1=1, stride2=1, corr_multiply=1)
         self.leakyRELU = nn.LeakyReLU(0.1)
 
@@ -495,7 +497,8 @@ class LCCNet(nn.Module):
             c25 = self.layer3_lidar(c24)  # 16
             c16 = self.layer4_rgb(c15)  # 32
             c26 = self.layer4_lidar(c25)  # 32
-
+        
+        # TODO : change correlation to correspendence Transformer algorithm
         corr6 = self.corr(c16, c26)
         corr6 = self.leakyRELU(corr6)
         x = torch.cat((self.conv6_0(corr6), corr6), 1)
@@ -504,7 +507,7 @@ class LCCNet(nn.Module):
         x = torch.cat((self.conv6_3(x), x), 1)
         x = torch.cat((self.conv6_4(x), x), 1)
 
-        if self.use_feat_from > 1:
+        if self.use_feat_from > 1:   # for optical flow , use multiple image page. 
             flow6 = self.predict_flow6(x)
             up_flow6 = self.deconv6(flow6)
             up_feat6 = self.upfeat6(x)
