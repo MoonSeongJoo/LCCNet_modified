@@ -60,3 +60,6 @@ train_moon_Ver8.2.py
 train_moon_Ver8.3.py
 train_moon_Ver8.4.py
 train_with_sacred.py 
+COTR/out/default.zip
+COTR/out/default/checkpoint.pth.tar
+
