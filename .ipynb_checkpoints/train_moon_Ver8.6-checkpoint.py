@@ -36,8 +36,8 @@ from torchvision.transforms import functional as tvtf
 from sacred import Experiment
 from sacred.utils import apply_backspaces_and_linefeeds
 
-from DatasetLidarCamera_Ver8_5 import DatasetLidarCameraKittiOdometry
-from losses_Ver8_5 import DistancePoints3D, GeometricLoss, L1Loss, ProposedLoss, CombinedLoss
+from DatasetLidarCamera_Ver8_6 import DatasetLidarCameraKittiOdometry
+from losses_Ver8_6 import DistancePoints3D, GeometricLoss, L1Loss, ProposedLoss, CombinedLoss
 
 
 from quaternion_distances import quaternion_distance
@@ -47,7 +47,7 @@ from utils import (mat2xyzrpy, merge_inputs, overlay_imgs, quat2mat,
                    quaternion_from_matrix, rotate_back, rotate_forward,
                    tvector2mat)
 
-from LCCNet_COTR_moon_Ver8_5 import LCCNet
+from LCCNet_COTR_moon_Ver8_6 import LCCNet
 from COTR.inference.sparse_engine_Ver3 import SparseEngine
 import warnings
 warnings.filterwarnings('ignore')
@@ -86,18 +86,18 @@ def config():
     dataset = 'kitti/odom' # 'kitti/raw'
     data_folder = "/mnt/data/kitti_odometry"
     use_reflectance = False
-    val_sequence = 6
-    epochs = 200
+    val_sequence = 7
+    epochs = 120
     BASE_LEARNING_RATE = 1e-4 # 1e-4
     loss = 'combined'
-    max_t = 0.2 # 1.5, 1.0,  0.5,  0.2,  0.1
-    max_r = 7.5 # 20.0, 10.0, 5.0,  2.0,  1.0
+    max_t = 1.5 # 1.5, 1.0,  0.5,  0.2,  0.1
+    max_r = 20 # 20.0, 10.0, 5.0,  2.0,  1.0
     batch_size = 8  # 120
     num_worker = 10
     network = 'Res_f1'
     optimizer = 'adam'
     resume = True
-    weights = '/root/work/LCCNet_Moon/checkpoints/kitti/odom/val_seq_06/models/checkpoint_r7.50_t0.20_e125_0.127.tar'
+    weights = '/root/work/LCCNet_Moon/checkpoints/kitti/odom/val_seq_07/models/checkpoint_r20.00_t1.50_e50_0.698.tar'
 #     weights = None
     rescale_rot = 1
     rescale_transl = 1
@@ -108,7 +108,7 @@ def config():
     weight_point_cloud = 0.3
     log_frequency = 1000
     print_frequency = 50
-    starting_epoch = 125
+    starting_epoch = 50
 
 # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 os.environ['CUDA_VISIBLE_DEVICES'] = '0, 1, 2, 3'
@@ -393,8 +393,8 @@ def main(_config, _run, seed):
     if _config['optimizer'] == 'adam':
         optimizer = optim.Adam(parameters, lr=_config['BASE_LEARNING_RATE'], weight_decay=5e-6)
         # Probably this scheduler is not used
-        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[20, 50, 70], gamma=0.5)
-#         scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[20, 50, 70], gamma=0.3)
+#         scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[20, 50, 70], gamma=0.5)
+        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[70 ,120], gamma=0.5
     else:
         optimizer = optim.SGD(parameters, lr=_config['BASE_LEARNING_RATE'], momentum=0.9,
                               weight_decay=5e-6, nesterov=True)
@@ -432,7 +432,8 @@ def main(_config, _run, seed):
             _run.log_scalar("LR", _config['BASE_LEARNING_RATE'] *
                             math.exp((1 - epoch) * 4e-2), epoch)
             for param_group in optimizer.param_groups:
-                param_group['lr'] = _config['BASE_LEARNING_RATE'] *                                     math.exp((1 - epoch) * 4e-2)
+                param_group['lr'] = _config['BASE_LEARNING_RATE'] * \
+                                    math.exp((1 - epoch) * 4e-2)
         else:
             #scheduler.step(epoch%100)
             _run.log_scalar("LR", scheduler.get_lr()[0])
@@ -727,9 +728,7 @@ def main(_config, _run, seed):
         else : 
             val_writer.add_scalar("Loss_Translation", trasl_e, val_iter)
             val_writer.add_scalar("Loss_Rotation", rot_e, val_iter)
-            val_writer.add_scalar("Total_Loss", loss['total_loss'].item(), val_iter)
-
-   
+            val_writer.add_scalar("Total_Loss", loss['total_loss'].item(), val_iter)   
 
      # SAVE
         val_loss = total_val_loss / len(dataset_val)

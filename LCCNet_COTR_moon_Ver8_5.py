@@ -273,39 +273,53 @@ class LCCNet(nn.Module):
         """
         super(LCCNet, self).__init__()
 
-        #instantization of Mondepth2 network model
-#         model_name = "mono_640x192"
-        model_name = "mono_resnet50_640x192"
-        #encoder_path = os.path.join("/root/work/LCCNet_Moon/monodepth2/models", model_name, "encoder.pth")
-        depth_decoder_path = os.path.join("/root/work/LCCNet_Moon/monodepth2/models", model_name, "depth.pth")
+#         #instantization of Mondepth2 network model
+# #         model_name = "mono_640x192"
+#         model_name = "mono_resnet50_640x192"
+#         #encoder_path = os.path.join("/root/work/LCCNet_Moon/monodepth2/models", model_name, "encoder.pth")
+#         depth_decoder_path = os.path.join("/root/work/LCCNet_Moon/monodepth2/models", model_name, "depth.pth")
         
-        self.encoder = monodepth2.networks.ResnetEncoder(50, True , num_input_images = 1)
-        self.depth_decoder = monodepth2.networks.DepthDecoder(num_ch_enc=self.encoder.num_ch_enc, scales=range(4))
+#         self.encoder = monodepth2.networks.ResnetEncoder(50, True , num_input_images = 1)
+#         self.depth_decoder = monodepth2.networks.DepthDecoder(num_ch_enc=self.encoder.num_ch_enc, scales=range(4))
         
-#         loaded_dict_enc = torch.load(encoder_path, map_location='cpu')
-#         filtered_dict_enc = {k: v for k, v in loaded_dict_enc.items() if k in self.encoder.state_dict()}
-#         self.encoder.load_state_dict(filtered_dict_enc)
+# #         loaded_dict_enc = torch.load(encoder_path, map_location='cpu')
+# #         filtered_dict_enc = {k: v for k, v in loaded_dict_enc.items() if k in self.encoder.state_dict()}
+# #         self.encoder.load_state_dict(filtered_dict_enc)
 
-        loaded_dict = torch.load(depth_decoder_path, map_location='cpu')
-        self.depth_decoder.load_state_dict(loaded_dict)
+#         loaded_dict = torch.load(depth_decoder_path, map_location='cpu')
+#         self.depth_decoder.load_state_dict(loaded_dict)
                
-#         self.feed_height = loaded_dict_enc['height']
-#         self.feed_width = loaded_dict_enc['width']
+# #         self.feed_height = loaded_dict_enc['height']
+# #         self.feed_width = loaded_dict_enc['width']
         
-        #print("--------self.feed_height -------" , self.feed_height)
-        #print("--------self.feed_width------" , self.feed_width)
+#         #print("--------self.feed_height -------" , self.feed_height)
+#         #print("--------self.feed_width------" , self.feed_width)
         
-        monodepth_load_weights_freeze = True
+#         monodepth_load_weights_freeze = True
         
-        if monodepth_load_weights_freeze is True:
-            print("monodepth pre-trained weights freeze")
-            for param in self.encoder.parameters():
-                param.requires_grad = False
-            for param in self.depth_decoder.parameters():
-                param.requires_grad = False
+#         if monodepth_load_weights_freeze is True:
+#             print("monodepth pre-trained weights freeze")
+#             for param in self.encoder.parameters():
+#                 param.requires_grad = False
+#             for param in self.depth_decoder.parameters():
+#                 param.requires_grad = False
         
 #         self.encoder.eval()
 #         self.depth_decoder.eval();
+
+        #initiation DPT depth estimation
+        model_type = "DPT_Large"     # MiDaS v3 - Large     (highest accuracy, slowest inference speed)
+        #model_type = "DPT_Hybrid"   # MiDaS v3 - Hybrid    (medium accuracy, medium inference speed)
+        #model_type = "MiDaS_small"  # MiDaS v2.1 - Small   (lowest accuracy, highest inference speed)
+        self.midas = torch.hub.load("intel-isl/MiDaS", model_type)
+        self.midas.eval()
+        
+        midas_transforms = torch.hub.load("intel-isl/MiDaS", "transforms")
+
+        if model_type == "DPT_Large" or model_type == "DPT_Hybrid":
+            self.transform = midas_transforms.dpt_transform
+        else:
+            self.transform = midas_transforms.small_transform
         
         # TODO : change correlation to correspendence Transformer algorithm
         self.corr = build(cotr_args)
@@ -412,12 +426,13 @@ class LCCNet(nn.Module):
         normalizer = mpl.colors.Normalize(vmin=disp_np.min(), vmax=vmax)
         mapper = cm.ScalarMappable(norm=normalizer, cmap='magma')  #magma, plasma, etc.
         colormapped_im = (mapper.to_rgba(disp_np)[:, :, :3])
+#         colormapped_im = (mapper.to_rgba(disp_np)[:, :, :3]).astype(np.uint8)
         return colormapped_im.transpose(2, 0, 1)
 #         return colormapped_im
 
     def forward(self, rgb_input, depth_input , query_input ,corr_target):
 #         print ("------- monodepth2 input information--------" )
-#         print ("rgb_input_shape =" , rgb_input.shape)
+#         print ("rgb_input_shape =" , rgb_input.shape[1:3])
 #         print ("depth_input_shape =" , depth_input.shape)
 #         print ("query_input_shape =" , query_input.shape)
                
@@ -427,18 +442,34 @@ class LCCNet(nn.Module):
         rgb_input_copy = rgb_input.permute(0,3,1,2)
 #         depth_input = depth_input.permuter(0,3,1,2)
         
-        with torch.no_grad():
-            rgb_features = self.encoder(rgb_input_copy)
-            rgb_outputs = self.depth_decoder(rgb_features)
-#             lidar_features = self.encoder(depth_input)
-#             lidar_outputs = self.depth_decoder(lidar_features)  
+#         with torch.no_grad():
+#             rgb_features = self.encoder(rgb_input_copy)
+#             rgb_outputs = self.depth_decoder(rgb_features)
+# #             lidar_features = self.encoder(depth_input)
+# #             lidar_outputs = self.depth_decoder(lidar_features)  
         
-#         rgb_features = self.encoder(rgb_input)
-#         rgb_outputs = self.depth_decoder(rgb_features)
-#         lidar_features = self.encoder(lidar_input)
-#         lidar_outputs = self.depth_decoder(lidar_features)   
-#         print ('rgb_outputs_shape=' , rgb_outputs[("disp", 0)].shape)
-        rgb_depth_pred = rgb_outputs[("disp", 0)]
+# #         rgb_features = self.encoder(rgb_input)
+# #         rgb_outputs = self.depth_decoder(rgb_features)
+# #         lidar_features = self.encoder(lidar_input)
+# #         lidar_outputs = self.depth_decoder(lidar_features)   
+# #         print ('rgb_outputs_shape=' , rgb_outputs[("disp", 0)].shape)
+#         rgb_depth_pred = rgb_outputs[("disp", 0)]
+#         rgb_depth_pred_resized = torch.nn.functional.interpolate(rgb_depth_pred, (192, 640), mode="bilinear", align_corners=False)   
+        
+        with torch.no_grad():
+            prediction = self.midas(rgb_input_copy)
+#             print("prediction shape=" , prediction.shape)
+
+            rgb_depth_pred = torch.nn.functional.interpolate(
+                prediction.unsqueeze(1),
+                size=rgb_input.shape[1:3],
+                mode="bilinear",
+                align_corners=False,
+            )
+            rgb_depth_pred_squeeze =  rgb_depth_pred.squeeze()
+        output = rgb_depth_pred_squeeze.cpu().numpy()
+        plt.imshow(output)
+        
         for idx in range(len(rgb_depth_pred)):
             rgb_pred = rgb_depth_pred[idx].squeeze(0)
             rgb_pred = self.colormap(rgb_pred)
@@ -451,25 +482,36 @@ class LCCNet(nn.Module):
 #         rgb_cotr_input = rgb_pred_input.permute(0,2,3,1)
         
 #         ####### display input signal #########        
-#         plt.figure(figsize=(10, 10))
+#         plt.figure(figsize=(20, 20))
 #         plt.subplot(311)
 # #         plt.imshow(cv2.cvtColor(torchvision.utils.make_grid(rgb_input).cpu().numpy() , cv2.COLOR_BGR2RGB))
 #         plt.imshow(torchvision.utils.make_grid(rgb_input_copy).permute(1,2,0).cpu().numpy())
 #         plt.title("RGB_input", fontsize=22)
 #         plt.axis('off')
-
+        
 #         plt.subplot(312)
 #         plt.imshow(torchvision.utils.make_grid(rgb_pred_input).permute(1,2,0).cpu().numpy() , cmap='magma')
 #         plt.title("rgb_depth_pred", fontsize=22)
 #         plt.axis('off')
+
+# #         rgb_depth_pred_resized_np = rgb_depth_pred_resized.squeeze().cpu().numpy()
+# #         vmax = np.percentile(rgb_depth_pred_resized_np, 95)
+# #         normalizer = mpl.colors.Normalize(vmin=rgb_depth_pred_resized_np.min(), vmax=vmax)
+# #         mapper = cm.ScalarMappable(norm=normalizer, cmap='magma')
+# #         colormapped_im = (mapper.to_rgba(rgb_depth_pred_resized_np)[:, :, :3] * 255).astype(np.uint8)
+
+# #         plt.subplot(413)
+# #         plt.imshow(colormapped_im , cmap='magma' , vmax=vmax)
+# #         plt.title("rgb_depth_pred 2", fontsize=22)
+# #         plt.axis('off')
         
 #         plt.subplot(313)
 #         plt.imshow(torchvision.utils.make_grid(depth_input).permute(1,2,0).cpu().numpy() , cmap='magma')
 #         plt.title("dense_depth_input", fontsize=22)
 #         plt.axis('off');            
                
-#         b, c, h, w = rgb_cotr_input.shape
-#         rgb_cotr_input = rgb_cotr_input.expand(b,3,h,w)
+#         b, c, h, w = rgb_pred_input.shape
+#         rgb_cotr_input = rgb_pred_input.expand(b,3,h,w)
          
         
 #         plt.figure(figsize=(10, 10))
@@ -565,22 +607,22 @@ class LCCNet(nn.Module):
 #         print ('pred_corrs[1] min ' , torch.min(corrs[:,1]))
 #         print ('pred_corrs[1] max ' , torch.max(corrs[:,1]))
         
-#         ##### display corrs images #############
-#         corrs_cpu = corrs.cpu().detach().numpy()
-#         query_cpu = query.cpu().detach().numpy()
-#         corr_target_cpu = corr_target.cpu().detach().numpy()
+        ##### display corrs images #############
+        corrs_cpu = corrs.cpu().detach().numpy()
+        query_cpu = query.cpu().detach().numpy()
+        corr_target_cpu = corr_target.cpu().detach().numpy()
         
-#         pred_corrs = np.concatenate([query_cpu, corrs_cpu], axis=-1)
-#         pred_corrs , draw_pred_out = self.draw_corrs(img_cpu, pred_corrs)
+        pred_corrs = np.concatenate([query_cpu, corrs_cpu], axis=-1)
+        pred_corrs , draw_pred_out = self.draw_corrs(img_cpu, pred_corrs)
         
-#         target_corrs = np.concatenate([query_cpu, corr_target_cpu], axis=-1)
-#         target_corrs , draw_target_out = self.draw_corrs(img_cpu, target_corrs)
+        target_corrs = np.concatenate([query_cpu, corr_target_cpu], axis=-1)
+        target_corrs , draw_target_out = self.draw_corrs(img_cpu, target_corrs)
         
 
-# #         print ('query_corr shape' , query.shape)
-# #         print ('query_corr value' , query)            
-# #         print ('target_corr shape' , corr_target.shape)
-# #         print ('target_corr value' , corr_target)
+#         print ('query_corr shape' , query.shape)
+#         print ('query_corr value' , query)            
+#         print ('target_corr shape' , corr_target.shape)
+#         print ('target_corr value' , corr_target)
 #         print ('------------- display start for analysis-------------')
 #         plt.figure(figsize=(20, 40))
 #         plt.subplot(211)

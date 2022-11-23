@@ -73,6 +73,17 @@ class DatasetLidarCameraKittiOdometry(Dataset):
         self.num_kp = 500
         print ("number of kp = " , self.num_kp)
         
+        model_type = "DPT_Large"     # MiDaS v3 - Large     (highest accuracy, slowest inference speed)
+        # model_type = "DPT_Hybrid"   # MiDaS v3 - Hybrid    (medium accuracy, medium inference speed)
+        # model_type = "MiDaS_small"  # MiDaS v2.1 - Small   (lowest accuracy, highest inference speed)
+        
+        midas_transforms = torch.hub.load("intel-isl/MiDaS", "transforms")
+
+        if model_type == "DPT_Large" or model_type == "DPT_Hybrid":
+            self.transform = midas_transforms.dpt_transform
+        else:
+            self.transform = midas_transforms.small_transform
+        
         self.all_files = []
         self.sequence_list = ['00', '01', '02', '03', '04', '05', '06', '07', '08', '09', '10',
                               '11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21']
@@ -227,7 +238,7 @@ class DatasetLidarCameraKittiOdometry(Dataset):
             mask = np.random.choice(length, self.num_kp - length)
             return np.concatenate([in_corrs, in_corrs[mask]], axis=0)
 
-    def knn(self, x, y , k):
+    def knn(self, x, y ,k):
 # #         print (" x shape = " , x.shape)
 #         inner = -2*torch.matmul(x.transpose(-2, 1), x)
 #         xx = torch.sum(x**2, dim=1, keepdim=True)
@@ -343,8 +354,9 @@ class DatasetLidarCameraKittiOdometry(Dataset):
         #     h_mirror = True
         #     pc_in[1, :] *= -1
 
-        img = Image.open(img_path).convert('RGB')
-#         img = cv2.imread(img_path)
+#         img = Image.open(img_path).convert('RGB')
+        img = cv2.imread(img_path)
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 #         print ('img raw shape' , np.asarray(img).shape)
         
         img_rotation = 0.
@@ -440,8 +452,11 @@ class DatasetLidarCameraKittiOdometry(Dataset):
         dense_depth_img = self.dense_map(lidarOnImage.T , 1241, 376 , 8)
         dense_depth_img = torch.tensor(dense_depth_img)
         
-        rgb_np_resized = img.resize((640, 192), Image.LANCZOS)
-        rgb_img = transforms.ToTensor()(rgb_np_resized)
+#         rgb_np_resized = img.resize((640, 192), Image.LANCZOS)
+        img = cv2.resize(img, (640,192), interpolation=cv2.INTER_LINEAR)
+        rgb_img = transforms.ToTensor()(img)
+#         rgb_img = self.transform(img)
+#         rgb_img = img.resize((1280, 384), Image.LANCZOS)
 
         depth_gt_np = depth_gt.permute(1,2,0)
         depth_gt_np = depth_gt_np.cpu().numpy()
@@ -477,10 +492,9 @@ class DatasetLidarCameraKittiOdometry(Dataset):
         if corrs.shape[0] <= self.num_kp :
             corrs = torch.zeros(self.num_kp, 4)
             corrs[:, 2] = corrs[:, 2] + 0.5
-#         print ("valid corrs shape = " , corrs.shape )
         
 #         corrs = self.trim_corrs(corrs) # random 2d point-cloud trim
-        corrs_knn_idx = self.knn(corrs[:,:2], corrs[:, 2:], self.num_kp) # knn 2d point-cloud trim
+        corrs_knn_idx = self.knn(corrs[:,:2], corrs[:,2:], self.num_kp) # knn 2d point-cloud trim
         corrs = corrs[corrs_knn_idx]
 #         print ("knn corrs shape = " , corrs.shape)
 

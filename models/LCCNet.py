@@ -31,7 +31,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '1'
 
 # from .networks.submodules import *
 # from .networks.correlation_package.correlation import Correlation
-#from models.correlation_package.correlation import Correlation
+from models.correlation_package.correlation import Correlation
 
 
 

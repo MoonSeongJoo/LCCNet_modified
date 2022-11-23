@@ -36,8 +36,8 @@ from torchvision.transforms import functional as tvtf
 from sacred import Experiment
 from sacred.utils import apply_backspaces_and_linefeeds
 
-from DatasetLidarCamera_Ver8_5 import DatasetLidarCameraKittiOdometry
-from losses_Ver8_5 import DistancePoints3D, GeometricLoss, L1Loss, ProposedLoss, CombinedLoss
+from DatasetLidarCamera_Ver9_0 import DatasetLidarCameraKittiOdometry
+from losses_Ver9_0 import DistancePoints3D, GeometricLoss, L1Loss, ProposedLoss, CombinedLoss
 
 
 from quaternion_distances import quaternion_distance
@@ -47,7 +47,7 @@ from utils import (mat2xyzrpy, merge_inputs, overlay_imgs, quat2mat,
                    quaternion_from_matrix, rotate_back, rotate_forward,
                    tvector2mat)
 
-from LCCNet_COTR_moon_Ver8_5 import LCCNet
+from LCCNet_COTR_moon_Ver9_0 import LCCNet
 from COTR.inference.sparse_engine_Ver3 import SparseEngine
 import warnings
 warnings.filterwarnings('ignore')
@@ -90,16 +90,16 @@ def config():
     epochs = 200
     BASE_LEARNING_RATE = 1e-4 # 1e-4
     loss = 'combined'
-    max_t = 0.2 # 1.5, 1.0,  0.5,  0.2,  0.1
-    max_r = 7.5 # 20.0, 10.0, 5.0,  2.0,  1.0
-    batch_size = 8  # 120
+    max_t = 1.5 # 1.5, 1.0,  0.5,  0.2,  0.1
+    max_r = 20.0 # 20.0, 10.0, 5.0,  2.0,  1.0
+    batch_size = 10  # 120
     num_worker = 10
     network = 'Res_f1'
     optimizer = 'adam'
     resume = True
-    weights = '/root/work/LCCNet_Moon/checkpoints/kitti/odom/val_seq_06/models/checkpoint_r7.50_t0.20_e125_0.127.tar'
-#     weights = None
-    rescale_rot = 1
+    weights = '/root/work/LCCNet_Moon/checkpoints/kitti/odom/val_seq_06/models/checkpoint_r20.00_t1.50_e15_1.034.tar'
+    #weights = None
+    rescale_rot = 2
     rescale_transl = 1
     precision = "O0"
     norm = 'bn'
@@ -108,7 +108,7 @@ def config():
     weight_point_cloud = 0.3
     log_frequency = 1000
     print_frequency = 50
-    starting_epoch = 125
+    starting_epoch = 16
 
 # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 os.environ['CUDA_VISIBLE_DEVICES'] = '0, 1, 2, 3'
@@ -258,7 +258,7 @@ def main(_config, _run, seed):
         _config['val_sequence'] = f"{_config['val_sequence']:02d}"
         print("Val Sequence: ", _config['val_sequence'])
         dataset_class = DatasetLidarCameraKittiOdometry
-        
+    
     img_shape = (384, 1280) # 네트워크의 입력 규모
     input_size = (256, 512)
     _config["checkpoints"] = os.path.join(_config["checkpoints"], _config['dataset'])
@@ -468,7 +468,6 @@ def main(_config, _run, seed):
                 dense_depth_img = sample['dense_depth_img'][idx].cuda()
                 pc_rotated = sample['pc_rotated'][idx].cuda()
                 
-        
                 # batch stack 
                 rgb_input.append(rgb)
 #                 lidar_input.append(depth_img)
@@ -485,8 +484,9 @@ def main(_config, _run, seed):
 #             query_gt_input = torch.stack(query_gt_input)
             corrs_input = torch.stack(corrs_input)
             dense_depth_img_input = torch.stack(dense_depth_img_input)
+#             print("main rgb_input_shape=" , rgb_input.shape)
             
-            rgb_input = rgb_input.permute(0,2,3,1)
+#             rgb_input = rgb_input.permute(0,2,3,1)
 #             sbs_img = rgb_input.clone()
 #             rgb_show = rgb_show.permute(0,2,3,1)
 #             rgb_show = sbs_img[: , : , :, :640]
@@ -670,9 +670,8 @@ def main(_config, _run, seed):
 #             query_input = torch.stack(query_input)
 #             query_gt_input = torch.stack(query_gt_input)
             corrs_input = torch.stack(corrs_input)
-            dense_depth_img_input = torch.stack(dense_depth_img_input)            
-            
-            rgb_input = rgb_input.permute(0,2,3,1)
+            dense_depth_img_input = torch.stack(dense_depth_img_input)
+#             rgb_input = rgb_input.permute(0,2,3,1)
 #             lidar_input = lidar_input.permute(0,3,1,2)
             dense_depth_img_input = dense_depth_img_input.permute(0,2,3,1)
             
@@ -730,7 +729,6 @@ def main(_config, _run, seed):
             val_writer.add_scalar("Total_Loss", loss['total_loss'].item(), val_iter)
 
    
-
      # SAVE
         val_loss = total_val_loss / len(dataset_val)
         if epoch % 1 == 0 :
