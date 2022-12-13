@@ -86,19 +86,19 @@ def config():
     dataset = 'kitti/odom' # 'kitti/raw'
     data_folder = "/mnt/data/kitti_odometry"
     use_reflectance = False
-    val_sequence = 5
-    epochs = 120
+    val_sequence = 6
+    epochs = 200
     BASE_LEARNING_RATE = 1e-4 # 1e-4
     loss = 'combined'
     max_t = 0.2 # 1.5, 1.0,  0.5,  0.2,  0.1
     max_r = 7.5 # 20.0, 10.0, 5.0,  2.0,  1.0
-    batch_size = 6  # 120
+    batch_size = 8  # 120
     num_worker = 10
     network = 'Res_f1'
     optimizer = 'adam'
     resume = True
-#     weights = '/root/work/LCCNet_Moon/checkpoints/kitti/odom/val_seq_21/models/checkpoint_r7.50_t0.20_e70_1.354.tar'
-    weights = None
+    weights = '/root/work/LCCNet_Moon/checkpoints/kitti/odom/val_seq_06/models/checkpoint_r7.50_t0.20_e125_0.127.tar'
+#     weights = None
     rescale_rot = 1
     rescale_transl = 1
     precision = "O0"
@@ -108,7 +108,7 @@ def config():
     weight_point_cloud = 0.3
     log_frequency = 1000
     print_frequency = 50
-    starting_epoch = 0
+    starting_epoch = 125
 
 # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 os.environ['CUDA_VISIBLE_DEVICES'] = '0, 1, 2, 3'
@@ -394,6 +394,7 @@ def main(_config, _run, seed):
         optimizer = optim.Adam(parameters, lr=_config['BASE_LEARNING_RATE'], weight_decay=5e-6)
         # Probably this scheduler is not used
         scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[20, 50, 70], gamma=0.5)
+#         scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[20, 50, 70], gamma=0.3)
     else:
         optimizer = optim.SGD(parameters, lr=_config['BASE_LEARNING_RATE'], momentum=0.9,
                               weight_decay=5e-6, nesterov=True)
@@ -560,14 +561,14 @@ def main(_config, _run, seed):
 #                 train_writer.add_image("miscalibrated_lidar", lidar_show[show_idx], train_iter)
                 train_writer.add_image("pred_lidar", depth_pred_np_resized_tensor, train_iter)
 
-                if _config['loss'] == 'combined':
-                    train_writer.add_scalar("Loss_Point_clouds", loss['point_clouds_loss'].item(), train_iter)
-                    train_writer.add_scalar("correspondence_matching", loss['corr_loss'].item(), train_iter)
-                    train_writer.add_scalar("Loss_Total", loss['total_loss'].item(), train_iter)
-                    train_writer.add_scalar("Loss_Translation", loss['transl_loss'].item(), train_iter)
-                    train_writer.add_scalar("Loss_Rotation", loss['rot_loss'].item(), train_iter)
-                else : 
-                    train_writer.add_scalar("Loss_Total", loss.item(), train_iter)
+#                 if _config['loss'] == 'combined':
+#                     train_writer.add_scalar("Loss_Point_clouds", loss['point_clouds_loss'].item(), train_iter)
+#                     train_writer.add_scalar("correspondence_matching", loss['corr_loss'].item(), train_iter)
+#                     train_writer.add_scalar("Loss_Total", loss['total_loss'].item(), train_iter)
+#                     train_writer.add_scalar("Loss_Translation", loss['transl_loss'].item(), train_iter)
+#                     train_writer.add_scalar("Loss_Rotation", loss['rot_loss'].item(), train_iter)
+#                 else : 
+#                     train_writer.add_scalar("Loss_Total", loss.item(), train_iter)
             
             if batch_idx % 50 == 0 and batch_idx != 0:
 
@@ -618,6 +619,11 @@ def main(_config, _run, seed):
         print('Total epoch time = %.2f' % (time.time() - epoch_start_time))
         print("------------------------------------")
         _run.log_scalar("Total training loss", total_train_loss / len(dataset_train), epoch)
+        
+        if _config['loss'] == 'combined':
+            train_writer.add_scalar("Loss_Total", total_train_loss / len(dataset_train), epoch)
+        else : 
+            train_writer.add_scalar("Loss_Total", loss.item(), train_iter)
 
        ## Validation ##
         total_val_loss = 0.
@@ -681,15 +687,15 @@ def main(_config, _run, seed):
             else : 
                 local_loss += loss.item()
 
-            if batch_idx % _config['log_frequency'] == 0:
-                if _config['loss'] == 'combined':
-                    val_writer.add_scalar("Loss_Translation", trasl_e, val_iter)
-                    val_writer.add_scalar("Loss_Rotation", rot_e, val_iter)
-                    val_writer.add_scalar("Total_Loss", loss['total_loss'].item(), val_iter)
-                else : 
-                    val_writer.add_scalar("Loss_Translation", trasl_e, val_iter)
-                    val_writer.add_scalar("Loss_Rotation", rot_e, val_iter)
-                    val_writer.add_scalar("Total_Loss", loss['total_loss'].item(), val_iter)
+#             if batch_idx % _config['log_frequency'] == 0:
+#                 if _config['loss'] == 'combined':
+#                     val_writer.add_scalar("Loss_Translation", trasl_e, val_iter)
+#                     val_writer.add_scalar("Loss_Rotation", rot_e, val_iter)
+#                     val_writer.add_scalar("Total_Loss", loss['total_loss'].item(), val_iter)
+#                 else : 
+#                     val_writer.add_scalar("Loss_Translation", trasl_e, val_iter)
+#                     val_writer.add_scalar("Loss_Rotation", rot_e, val_iter)
+#                     val_writer.add_scalar("Total_Loss", loss['total_loss'].item(), val_iter)
             
             if batch_idx % 50 == 0 and batch_idx != 0:
                 print('Iter %d val loss = %.3f , time = %.2f' % (batch_idx, local_loss/50.,
@@ -713,6 +719,15 @@ def main(_config, _run, seed):
         _run.log_scalar("Val_Loss", total_val_loss / len(dataset_val), epoch)
         _run.log_scalar("Val_t_error", total_val_t / len(dataset_val), epoch)
         _run.log_scalar("Val_r_error", total_val_r / len(dataset_val), epoch)
+
+        if _config['loss'] == 'combined':
+            val_writer.add_scalar("Loss_Translation", total_val_t / len(dataset_val), epoch)
+            val_writer.add_scalar("Loss_Rotation", total_val_r / len(dataset_val), epoch)
+            val_writer.add_scalar("Total_Loss", total_val_loss / len(dataset_val), epoch)
+        else : 
+            val_writer.add_scalar("Loss_Translation", trasl_e, val_iter)
+            val_writer.add_scalar("Loss_Rotation", rot_e, val_iter)
+            val_writer.add_scalar("Total_Loss", loss['total_loss'].item(), val_iter)
 
    
 

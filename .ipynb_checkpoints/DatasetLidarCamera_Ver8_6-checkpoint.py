@@ -70,7 +70,7 @@ class DatasetLidarCameraKittiOdometry(Dataset):
         self.K = {}
         self.suf = suf
         self.img_shape =(384,1280)
-        self.num_kp = 30
+        self.num_kp = 500
         print ("number of kp = " , self.num_kp)
         
         self.all_files = []
@@ -474,6 +474,9 @@ class DatasetLidarCameraKittiOdometry(Dataset):
         
 #         valid_mask = (corrs[:, 1] < 0.5) & (corrs[:, 3] < 0.5) 
 #         corrs = corrs[valid_mask]
+        if corrs.shape[0] <= self.num_kp :
+            corrs = torch.zeros(self.num_kp, 4)
+            corrs[:, 2] = corrs[:, 2] + 0.5
 #         print ("valid corrs shape = " , corrs.shape )
         
 #         corrs = self.trim_corrs(corrs) # random 2d point-cloud trim

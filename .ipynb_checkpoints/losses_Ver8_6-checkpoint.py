@@ -112,9 +112,9 @@ class CombinedLoss(nn.Module):
         self.rescale_trans = rescale_trans
         self.rescale_rot = rescale_rot
         self.transl_loss = nn.SmoothL1Loss(reduction='none')        
-        self.weight_point_cloud = 0.1
-        self.weight_corr = 0.1
-        self.weight_pose = 0.8
+        self.weight_point_cloud = 0.3
+        self.weight_corr = 0.3
+        self.weight_pose = 0.4
         self.loss = {}
 
 #     def forward(self, point_clouds, target_transl, target_rot, transl_err, rot_err):

@@ -440,8 +440,10 @@ class DatasetLidarCameraKittiOdometry(Dataset):
         dense_depth_img = self.dense_map(lidarOnImage.T , 1241, 376 , 8)
         dense_depth_img = torch.tensor(dense_depth_img)
         
-        rgb_np_resized = img.resize((640, 192), Image.LANCZOS)
+#         rgb_np_resized = img.resize((640, 192), Image.LANCZOS)
+        rgb_np_resized = img.resize((1280, 384), Image.LANCZOS)
         rgb_img = transforms.ToTensor()(rgb_np_resized)
+#         rgb_img = transforms.ToTensor()(rgb_np_resized)
 
         depth_gt_np = depth_gt.permute(1,2,0)
         depth_gt_np = depth_gt_np.cpu().numpy()
