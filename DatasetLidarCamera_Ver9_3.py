@@ -70,7 +70,7 @@ class DatasetLidarCameraKittiOdometry(Dataset):
         self.K = {}
         self.suf = suf
         self.img_shape =(384,1280)
-        self.num_kp = 500
+        self.num_kp = 30
         print ("number of kp = " , self.num_kp)
         
         # model_type = "DPT_Large"     # MiDaS v3 - Large     (highest accuracy, slowest inference speed)

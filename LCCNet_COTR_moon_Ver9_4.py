@@ -29,7 +29,6 @@ import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 import matplotlib as mpl
 import matplotlib.cm as cm
-import cv2
 from PIL import Image , ImageDraw
 import easydict
 
@@ -47,7 +46,7 @@ cotr_args = easydict.EasyDict({
                 "out_dir" : "general_config['out']",
                 "load_weights" : "None",
 #                 "load_weights_path" : './COTR/out/default/checkpoint.pth.tar' ,
-               "load_weights_path" : '/home/seongjoo/work/autocalib/LCCNet_Moon/considering_project/COTR/out/model/76000_0.0008val_checkpoint.pth.tar',
+                "load_weights_path" : '/home/seongjoo/work/autocalib/LCCNet_Moon/considering_project/COTR/out/model/76000_0.0008val_checkpoint.pth.tar',
                 "load_weights_path" : None ,
                 "load_weights_freeze" : False ,
                 "max_corrs" : 500 ,
@@ -98,26 +97,71 @@ import easydict
 #         self.encoder.eval()
 #         self.depth_decoder.eval()
 
+class STNNet(nn.Module):
+    def __init__(self):
+        super(STNNet, self).__init__()
+        # self.conv1 = nn.Conv2d(1, 10, kernel_size=5)
+        # self.conv2 = nn.Conv2d(10, 20, kernel_size=5)
+        # self.conv2_drop = nn.Dropout2d()
+        # self.fc1 = nn.Linear(320, 50)
+        # self.fc2 = nn.Linear(50, 10)
+
+        # 공간 변환을 위한 위치 결정 네트워크 (localization-network)
+        self.localization = nn.Sequential(
+            nn.Conv2d(3, 64, kernel_size=7 , stride=2 , padding=3 , bias=False),
+            nn.MaxPool2d(kernel_size=3, stride=2, padding=1),
+            nn.ReLU(True),
+            nn.Conv2d(64, 128, kernel_size=7 , stride=2 , padding=3 , bias=False),
+            nn.MaxPool2d(kernel_size=3, stride=2, padding=1),
+            nn.ReLU(True)
+        )
+
+        # [3 * 2] 크기의 아핀(affine) 행렬에 대해 예측
+        self.fc_loc = nn.Sequential(
+            nn.Linear(128 * 12 * 40 , 32),
+            nn.ReLU(True),
+            nn.Linear(32, 3 * 2)
+        )
+
+        # 항등 변환(identity transformation)으로 가중치/바이어스 초기화
+        self.fc_loc[2].weight.data.zero_()
+        self.fc_loc[2].bias.data.copy_(torch.tensor([1, 0, 0, 0, 1, 0], dtype=torch.float))
+
+    # STN의 forward 함수
+    def stn(self, x):
+        xs = self.localization(x)
+        xs = xs.view(-1, 128 * 12 * 40)
+        theta = self.fc_loc(xs)
+        theta = theta.view(-1, 2, 3)
+
+        grid = F.affine_grid(theta, x.size())
+        x = F.grid_sample(x, grid)
+
+        return x
+    
 class LCCNet(nn.Module):
     """
     Based on the PWC-DC net. add resnet encoder, dilation convolution and densenet connections
     """
 
     def __init__(self, image_size =64, use_feat_from=1, md=4, use_reflectance=False, dropout=0.0,
-                 Action_Func='leakyrelu', attention=False, res_num=50):
+                 Action_Func='leakyrelu', attention=False, res_num=50 , num_kp=500 ):
         """
         input: md --- maximum displacement (for correlation. default: 4), after warpping
         """
         super(LCCNet, self).__init__()
-        # self.mono = MonoDepth()
+        self.num_kp = num_kp
         
+        # self.mono = MonoDepth() # depth estimation by monodepth2
+        # self.STN = STNNet()
         # TODO : change correlation to correspendence Transformer algorithm
+        
         self.corr = build(cotr_args)
         
         # TODO : load COTR pre-trained model    
         if cotr_args.load_weights_path is not None:
             print(f"Loading weights from {cotr_args.load_weights_path}")
-            weights = torch.load(cotr_args.load_weights_path, map_location='cuda')['model_state_dict']
+            weights = torch.load(cotr_args.load_weights_path, map_location='cpu')['model_state_dict']
             # weights = torch.load(cotr_args.load_weights_path, map_location='gpu')['model_state_dict']
             utils.safe_load_weights(self.corr, weights)
         
@@ -130,8 +174,7 @@ class LCCNet(nn.Module):
         self.leakyRELU = nn.LeakyReLU(0.1)
 
         #self.fc1 = nn.Linear(fc_size * 4, 512)
-        self.fc1 = nn.Linear(2000, 256) # select numer of corresepondence matching point * 2 shape[0] # ========= number of kp (self.num_kp) * 4 ===========
-
+        self.fc1 = nn.Linear(self.num_kp * 4 , 256) # select numer of corresepondence matching point * 2 shape[0] # ========= number of kp (self.num_kp) * 4 ===========
         #self.fc1_trasl = nn.Linear(512, 256)
         self.fc1_trasl = nn.Linear(256, 256)
         self.fc1_rot = nn.Linear(256, 256)
@@ -148,21 +191,21 @@ class LCCNet(nn.Module):
                     m.bias.data.zero_()
                     
 
-    def _make_layer(self, block, planes, blocks, stride=1):
-        downsample = None
-        if stride != 1 or self.inplanes != planes * block.expansion:
-            downsample = nn.Sequential(
-                conv1x1(self.inplanes, planes * block.expansion, stride),
-                nn.BatchNorm2d(planes * block.expansion),
-            )
+    # def _make_layer(self, block, planes, blocks, stride=1):
+    #     downsample = None
+    #     if stride != 1 or self.inplanes != planes * block.expansion:
+    #         downsample = nn.Sequential(
+    #             conv1x1(self.inplanes, planes * block.expansion, stride),
+    #             nn.BatchNorm2d(planes * block.expansion),
+    #         )
 
-        layers = []
-        layers.append(block(self.inplanes, planes, stride, downsample))
-        self.inplanes = planes * block.expansion
-        for _ in range(1, blocks):
-            layers.append(block(self.inplanes, planes))
+    #     layers = []
+    #     layers.append(block(self.inplanes, planes, stride, downsample))
+    #     self.inplanes = planes * block.expansion
+    #     for _ in range(1, blocks):
+    #         layers.append(block(self.inplanes, planes))
 
-        return nn.Sequential(*layers)
+    #     return nn.Sequential(*layers)
     
     def two_images_side_by_side(self, img_a, img_b):
         assert img_a.shape == img_b.shape, f'{img_a.shape} vs {img_b.shape}'
@@ -175,7 +218,8 @@ class LCCNet(nn.Module):
 #         canvas[:, 1 * w:2 * w, :] = img_b
         canvas = np.zeros((b, h, 2 * w, c), dtype=img_a.cpu().numpy().dtype)
         canvas[:, :, 0 * w:1 * w, :] = img_a.cpu().numpy()
-        canvas[:, :, 1 * w:2 * w, :] = img_b.cpu().numpy()
+        # canvas[:, :, 1 * w:2 * w, :] = img_b.cpu().numpy()
+        canvas[:, :, 1 * w:2 * w, :] = img_b.detach().cpu().numpy()
 
 #         canvas[:, :, : , 0 * w:1 * w] = img_a.cpu().numpy()
 #         canvas[:, :, : , 1 * w:2 * w] = img_b.cpu().numpy()
@@ -196,18 +240,18 @@ class LCCNet(nn.Module):
         out = np.array(out) / 255.0
         return utils.np_img_to_torch_img(out) , out   
     
-    def make_queries(self):
-        q_list = []
-        MAX_SIZE = 256
-        for i in range(MAX_SIZE):
-            queries = []
-            for j in range(MAX_SIZE * 2):
-                queries.append([(j) / (MAX_SIZE * 2), i / MAX_SIZE])
-            queries = np.array(queries)
-            q_list.append(queries)
-            queries = torch.from_numpy(np.concatenate(q_list))[None].float().cuda()
+    # def make_queries(self):
+    #     q_list = []
+    #     MAX_SIZE = 256
+    #     for i in range(MAX_SIZE):
+    #         queries = []
+    #         for j in range(MAX_SIZE * 2):
+    #             queries.append([(j) / (MAX_SIZE * 2), i / MAX_SIZE])
+    #         queries = np.array(queries)
+    #         q_list.append(queries)
+    #         queries = torch.from_numpy(np.concatenate(q_list))[None].float().cuda()
         
-        return queries
+    #     return queries
     
     def colormap(self, disp):
         """"Color mapping for disp -- [H, W] -> [3, H, W]"""
@@ -271,9 +315,14 @@ class LCCNet(nn.Module):
         
         rgb_pred_input = rgb_input.permute(0,2,3,1)
         rgb_pred_input = rgb_pred_input.type(torch.float32)
-        depth_input = depth_input.permute(0,2,3,1)
+        # depth_input = depth_input.permute(0,2,3,1)
         depth_input = depth_input.type(torch.float32)
-
+        
+        # Spatial Transformer Network forwarding pass
+        # 입력을 변환
+        # depth_input = self.STN.stn(depth_input)
+        depth_input = depth_input.permute(0,2,3,1)
+        
         sbs_img = self.two_images_side_by_side(rgb_pred_input, depth_input)
         sbs_img = torch.from_numpy(sbs_img).permute(0,3,1,2)
         sbs_img = tvtf.normalize(sbs_img, (0.485, 0.456, 0.406), (0.229, 0.224, 0.225))

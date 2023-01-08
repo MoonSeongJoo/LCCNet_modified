@@ -47,7 +47,7 @@ cotr_args = easydict.EasyDict({
                 "out_dir" : "general_config['out']",
                 "load_weights" : "None",
 #                 "load_weights_path" : './COTR/out/default/checkpoint.pth.tar' ,
-               "load_weights_path" : '/home/seongjoo/work/autocalib/LCCNet_Moon/considering_project/COTR/out/model/76000_0.0008val_checkpoint.pth.tar',
+            #    "load_weights_path" : '/home/seongjoo/work/autocalib/LCCNet_Moon/considering_project/COTR/out/model/76000_0.0008val_checkpoint.pth.tar',
                 "load_weights_path" : None ,
                 "load_weights_freeze" : False ,
                 "max_corrs" : 500 ,
@@ -130,7 +130,7 @@ class LCCNet(nn.Module):
         self.leakyRELU = nn.LeakyReLU(0.1)
 
         #self.fc1 = nn.Linear(fc_size * 4, 512)
-        self.fc1 = nn.Linear(2000, 256) # select numer of corresepondence matching point * 2 shape[0] # ========= number of kp (self.num_kp) * 4 ===========
+        self.fc1 = nn.Linear(120, 256) # select numer of corresepondence matching point * 2 shape[0] # ========= number of kp (self.num_kp) * 4 ===========
 
         #self.fc1_trasl = nn.Linear(512, 256)
         self.fc1_trasl = nn.Linear(256, 256)
