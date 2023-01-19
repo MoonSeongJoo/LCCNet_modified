@@ -666,7 +666,7 @@ def main(_config, _run, seed):
             sample['rot_error'] = sample['rot_error'].cuda()
 
             for idx in range(len(sample['rgb'])):
-                real_shape = [sample['rgb'][idx].shape[0], sample['rgb'][idx].shape[1], sample['rgb'][idx].shape[0]]
+                real_shape = [sample['rgb'][idx].shape[0], sample['rgb'][idx].shape[1], sample['rgb'][idx].shape[2]]
                 
                 rgb = sample['rgb'][idx]
                 rgb = transforms.ToTensor()(rgb).cuda()
