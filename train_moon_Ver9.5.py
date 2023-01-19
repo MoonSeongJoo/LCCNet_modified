@@ -90,7 +90,7 @@ def config():
     use_reflectance = False
     val_sequence = 6
     epochs = 200
-    BASE_LEARNING_RATE = 5e-5 # 1e-4
+    BASE_LEARNING_RATE = 3e-4 # 1e-4
     loss = 'combined'
     max_t = 1.5 # 1.5, 1.0,  0.5,  0.2,  0.1
     max_r = 20.0 # 20.0, 10.0, 5.0,  2.0,  1.0
@@ -666,7 +666,7 @@ def main(_config, _run, seed):
             sample['rot_error'] = sample['rot_error'].cuda()
 
             for idx in range(len(sample['rgb'])):
-                real_shape = [sample['rgb'][idx].shape[1], sample['rgb'][idx].shape[2], sample['rgb'][idx].shape[0]]
+                real_shape = [sample['rgb'][idx].shape[0], sample['rgb'][idx].shape[1], sample['rgb'][idx].shape[0]]
                 
                 rgb = sample['rgb'][idx]
                 rgb = transforms.ToTensor()(rgb).cuda()
@@ -693,6 +693,12 @@ def main(_config, _run, seed):
                 depth_img, uv , z,  points_index = lidar_project_depth(pc_rotated, sample['calib'][idx], real_shape) # image_shape
                 depth_img /= _config['max_depth']
                 
+                lidarOnImage = np.hstack([uv, z])
+                dense_depth_img = dense_map(lidarOnImage.T , real_shape[1], real_shape[0] , _config['dense_resoltuion']) # argument = (lidarOnImage.T , 1241, 376 , 8)
+                dense_depth_img = dense_depth_img.astype(np.uint8)
+                dense_depth_img_color = colormap(dense_depth_img)
+                dense_depth_img_color = transforms.ToTensor()(dense_depth_img_color)  
+                
                 # PAD ONLY ON RIGHT AND BOTTOM SIDE
                 shape_pad = [0, 0, 0, 0]
 
@@ -700,8 +706,9 @@ def main(_config, _run, seed):
                 shape_pad[1] = (img_shape[1] - rgb.shape[2])  # // 2 + 1
 
                 rgb = F.pad(rgb, shape_pad)
-                depth_img = F.pad(depth_img, shape_pad).cuda()
+                # depth_img = F.pad(depth_img, shape_pad).cuda()
                 depth_gt = F.pad(depth_gt, shape_pad).cuda()
+                dense_depth_img_color = F.pad(dense_depth_img_color, shape_pad).cuda()
                 
                 # corr dataset generation 
                 corrs = corr_gen(gt_points_index, points_index , gt_uv, uv , _config["num_kp"])
@@ -709,7 +716,7 @@ def main(_config, _run, seed):
                 
                 # batch stack 
                 rgb_input.append(rgb)
-                lidar_input.append(depth_img)
+                lidar_input.append(dense_depth_img_color)
                 lidar_gt.append(depth_gt)
                 real_shape_input.append(real_shape)
                 shape_pad_input.append(shape_pad)
@@ -720,8 +727,21 @@ def main(_config, _run, seed):
             rgb_input = torch.stack(rgb_input) 
             rgb_input = F.interpolate(rgb_input, size=[192, 640], mode="bilinear") # lidar 2d depth map input [256,512,1]
             lidar_input = F.interpolate(lidar_input, size=[192, 640], mode="bilinear") # camera input = [256,512,3]
-            lidar_input = torch.cat((lidar_input,lidar_input,lidar_input), 1)
+            # lidar_input = torch.cat((lidar_input,lidar_input,lidar_input), 1)
             corrs_input = torch.stack(corrs_input)
+            
+            # ####### display input signal #########        
+            # plt.figure(figsize=(10, 10))
+            # plt.subplot(211)
+            # plt.imshow(torchvision.utils.make_grid(rgb_input).permute(1,2,0).cpu().numpy())
+            # plt.title("RGB_input", fontsize=22)
+            # plt.axis('off')
+
+            # plt.subplot(212)
+            # plt.imshow(torchvision.utils.make_grid(lidar_input).permute(1,2,0).cpu().numpy() , cmap='magma')
+            # plt.title("dense_depth_input", fontsize=22)
+            # plt.axis('off')        
+            # ############# end of display input signal ###################
                         
             loss, trasl_e, rot_e, R_predicted,  T_predicted = val(model, rgb_input, lidar_input, corrs_input ,
                                                                   sample['tr_error'], sample['rot_error'],
@@ -792,7 +812,7 @@ def main(_config, _run, seed):
             torch.save({
                 'config': _config,
                 'epoch': epoch,
-                # 'state_dict': model.state_dict(), # single gpu
+                'state_dict': model.state_dict(), # single gpu
                 'state_dict': model.module.state_dict(), # multi gpu
                 'optimizer': optimizer.state_dict(),
                 'train_loss': total_train_loss / len(dataset_train),
