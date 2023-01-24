@@ -123,18 +123,14 @@ def merge_inputs(queries):
 #     returns = {key: default_collate([d[key] for d in queries]) for key in queries[0]
 #                if key != 'point_cloud' and key != 'rgb' and key != 'reflectance' }
     returns = {key: default_collate([d[key] for d in queries]) for key in queries[0]
-           if key != 'point_cloud' and key != 'rgb' and key != 'reflectance' and key != 'corrs' and key != 'pc_rotated' }
+           if key != 'point_cloud' and key != 'rgb' and key != 'reflectance' }
     for input in queries:
         point_clouds.append(input['point_cloud'])
         imgs.append(input['rgb'])
-        corrs.append(input['corrs'])
-        pc_rotated.append(input['pc_rotated'])
         if 'reflectance' in input:
             reflectances.append(input['reflectance'])
     returns['point_cloud'] = point_clouds
     returns['rgb'] = imgs
-    returns['corrs'] = corrs
-    returns['pc_rotated'] = pc_rotated
     if len(reflectances) > 0:
         returns['reflectance'] = reflectances
     return returns
