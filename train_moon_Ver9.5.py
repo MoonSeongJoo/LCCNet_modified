@@ -90,7 +90,7 @@ def config():
     use_reflectance = False
     val_sequence = 6
     epochs = 200
-    BASE_LEARNING_RATE = 8e-5 # 1e-4
+    BASE_LEARNING_RATE = 1e-4 # 1e-4
     loss = 'combined'
     max_t = 1.5 # 1.5, 1.0,  0.5,  0.2,  0.1
     max_r = 20.0 # 20.0, 10.0, 5.0,  2.0,  1.0
@@ -100,8 +100,8 @@ def config():
     optimizer = 'adam'
     resume = True
     # weights = '/home/seongjoo/work/autocalib/LCCNet_Moon/considering_project/models/66_checkpoint.pth.tar'
-    # weights = '/home/ubuntu/work/autocalib/considering_project/checkpoints/kitti/odom/val_seq_06/models/checkpoint_r20.00_t1.50_e2_0.019.tar'
-    weights = None
+    weights = '/home/ubuntu/work/autocalib/considering_project/checkpoints/kitti/odom/val_seq_06/models/checkpoint_r20.00_t1.50_e1_0.010.tar'
+    # weights = None
     rescale_rot = 1.0   # LCCNet initial = 1.0    
     rescale_transl = 2.0  # LCCNet initial = 2.0 
     precision = "O0"
@@ -422,7 +422,7 @@ def main(_config, _run, seed):
             _run.log_scalar("LR", _config['BASE_LEARNING_RATE'] *
                             math.exp((1 - epoch) * 4e-2), epoch)
             for param_group in optimizer.param_groups:
-                param_group['lr'] = _config['BASE_LEARNING_RATE'] *                                     math.exp((1 - epoch) * 4e-2)
+                param_group['lr'] = _config['BASE_LEARNING_RATE'] * math.exp((1 - epoch) * 4e-2)
         else:
             #scheduler.step(epoch%100)
             _run.log_scalar("LR", scheduler.get_lr()[0])
@@ -545,11 +545,11 @@ def main(_config, _run, seed):
             else :
                 local_loss += loss.item()
             
-            train_local_loss = local_loss/_config['local_log_frequency']
-            train_corr_loss = local_corr_loss/_config['local_log_frequency']
-            train_pcl_loss = local_pcl_loss/_config['local_log_frequency']
-            train_rot_loss = local_rot_loss/_config['local_log_frequency']
-            train_trans_loss =local_trans_loss/_config['local_log_frequency']
+            train_local_loss = local_loss/50
+            train_corr_loss = local_corr_loss/50
+            train_pcl_loss = local_pcl_loss/50
+            train_rot_loss = local_rot_loss/50
+            train_trans_loss =local_trans_loss/50
             
 
 #             if batch_idx % _config['log_frequency'] == 0:
@@ -611,16 +611,21 @@ def main(_config, _run, seed):
             if batch_idx % 50 == 0 and batch_idx != 0:
 
                 print(f'Iter {batch_idx}/{len(TrainImgLoader)} training loss = {train_local_loss:.6f}, '
+                      f'loss of corr = {train_corr_loss:.6f} ,'
+                      f'loss of pcl = {train_pcl_loss:.6f} ,'
+                      f'loss of rot = {train_rot_loss:.6f} ,'
+                      f'loss of trans = {train_trans_loss:.6f} '
                       f'time = {(time.time() - start_time)/rgb_input.shape[0]:.4f}, '
                     #   f'time_preprocess = {(end_preprocess-start_preprocess)/rgb_input.shape[0]:.4f}, '
-                      f'time for 50 iter: {time.time()-time_for_50ep:.4f} ,'
-                      f'local loss of corr = {train_corr_loss:.6f} ,'
-                      f'local loss of pcl distance = {train_pcl_loss:.6f} ,'
-                      f'local loss of rotation = {train_rot_loss:.6f} ,'
-                      f'local loss of translation = {train_trans_loss:.6f} ')
+                      f'time for 50 iter: {time.time()-time_for_50ep:.4f} ,')
+                
                 time_for_50ep = time.time()
                 _run.log_scalar("Loss", local_loss/50, train_iter)
                 local_loss = 0.
+                local_corr_loss =  0.
+                local_pcl_loss = 0.
+                local_rot_loss = 0.
+                local_trans_loss = 0.
                 
                 #train_loss = train_local_loss / len(dataset_train)
                 ######### save network model for intermediate verification #####################  
