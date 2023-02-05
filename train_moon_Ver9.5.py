@@ -86,11 +86,11 @@ def config():
     checkpoints = './checkpoints/'
     dataset = 'kitti/odom' # 'kitti/raw'
     # data_folder = "/home/ubuntu/data/kitti_odometry"
-    data_folder = "/mnt/sgvrnas/sjmoon/kitti/kitti_odometry"
+    data_folder = "/mnt/data/kitti_odometry"
     use_reflectance = False
     val_sequence = 6
     epochs = 200
-    BASE_LEARNING_RATE = 3e-4 # 1e-4
+    BASE_LEARNING_RATE = 8e-5 # 1e-4
     loss = 'combined'
     max_t = 1.5 # 1.5, 1.0,  0.5,  0.2,  0.1
     max_r = 20.0 # 20.0, 10.0, 5.0,  2.0,  1.0
@@ -101,7 +101,7 @@ def config():
     resume = True
     # weights = '/home/seongjoo/work/autocalib/LCCNet_Moon/considering_project/models/66_checkpoint.pth.tar'
     weights = None
-    rescale_rot = 2
+    rescale_rot = 1
     rescale_transl = 1
     precision = "O0"
     norm = 'bn'

@@ -46,7 +46,7 @@ cotr_args = easydict.EasyDict({
                 "out_dir" : "general_config['out']",
                 "load_weights" : "None",
 #                 "load_weights_path" : './COTR/out/default/checkpoint.pth.tar' ,
-                "load_weights_path" : "/home/seongjoo/work/autocalib/LCCNet_Moon/considering_project/models/66_checkpoint.pth.tar",
+                "load_weights_path" : "/root/work/LCCNet_Moon/models/184_checkpoint.pth.tar",
                 # "load_weights_path" : True ,
                 "load_weights_freeze" : False ,
                 "max_corrs" : 100 ,
@@ -73,8 +73,8 @@ import easydict
 class MonoDepth():
     def __init__(self):
         self.model_name         = "mono_resnet50_640x192"
-        self.encoder_path       = os.path.join("/home/seongjoo/work/autocalib/LCCNet_Moon/considering_project/monodepth2/models", self.model_name, "encoder.pth")
-        self.depth_decoder_path = os.path.join("/home/seongjoo/work/autocalib/LCCNet_Moon/considering_project/monodepth2/models", self.model_name, "depth.pth")
+        self.encoder_path       = os.path.join("/root/work/LCCNet_Moon/monodepth2/models", self.model_name, "encoder.pth")
+        self.depth_decoder_path = os.path.join("/root/work/LCCNet_Moon/monodepth2/models", self.model_name, "depth.pth")
         
         # device = torch.device("cuda")
         self.encoder = monodepth2.networks.ResnetEncoder(50, False)

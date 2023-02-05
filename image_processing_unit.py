@@ -7,7 +7,7 @@ import matplotlib as mpl
 import matplotlib.cm as cm
 import scipy
 import skimage
-from pypardiso import spsolve
+# from pypardiso import spsolve
 
 def get_2D_lidar_projection(pcl, cam_intrinsic):
     pcl_xyz = cam_intrinsic @ pcl.T
