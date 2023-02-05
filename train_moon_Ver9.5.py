@@ -732,6 +732,12 @@ def main(_config, _run, seed):
                 dense_depth_img_color = colormap(dense_depth_img)
                 dense_depth_img_color = transforms.ToTensor()(dense_depth_img_color)                
                 
+                lidarOnImage = np.hstack([uv, z])
+                dense_depth_img = dense_map(lidarOnImage.T , real_shape[1], real_shape[0] , _config['dense_resoltuion']) # argument = (lidarOnImage.T , 1241, 376 , 8)
+                dense_depth_img = dense_depth_img.astype(np.uint8)
+                dense_depth_img_color = colormap(dense_depth_img)
+                dense_depth_img_color = transforms.ToTensor()(dense_depth_img_color)  
+                
                 # PAD ONLY ON RIGHT AND BOTTOM SIDE
                 shape_pad = [0, 0, 0, 0]
 
@@ -845,7 +851,7 @@ def main(_config, _run, seed):
             torch.save({
                 'config': _config,
                 'epoch': epoch,
-                # 'state_dict': model.state_dict(), # single gpu
+                'state_dict': model.state_dict(), # single gpu
                 'state_dict': model.module.state_dict(), # multi gpu
                 'optimizer': optimizer.state_dict(),
                 'train_loss': total_train_loss / len(dataset_train),
