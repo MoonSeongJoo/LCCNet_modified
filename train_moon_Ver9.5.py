@@ -88,21 +88,21 @@ def config():
     # data_folder = "/home/ubuntu/data/kitti_odometry"
     data_folder = "/mnt/data/kitti_odometry"
     use_reflectance = False
-    val_sequence = 6
+    val_sequence = 7
     epochs = 200
     BASE_LEARNING_RATE = 8e-5 # 1e-4
     loss = 'combined'
     max_t = 1.5 # 1.5, 1.0,  0.5,  0.2,  0.1
     max_r = 20.0 # 20.0, 10.0, 5.0,  2.0,  1.0
-    batch_size = 10 # 120
+    batch_size = 7 # 120
     num_worker = 16
     network = 'Res_f1'
     optimizer = 'adam'
     resume = True
-    # weights = '/home/seongjoo/work/autocalib/LCCNet_Moon/considering_project/models/66_checkpoint.pth.tar'
-    weights = None
-    rescale_rot = 2
-    rescale_transl = 1
+    weights = '/root/work/LCCNet_Moon/checkpoints/kitti/odom/val_seq_06/models/checkpoint_r20.00_t1.50_e9_0.002.tar'
+    # weights = None
+    rescale_rot = 1.0  #LCCNet initail value = 1.0
+    rescale_transl = 2.0  #LCCNet initatil value = 2.0
     precision = "O0"
     norm = 'bn'
     dropout = 0.0
@@ -111,7 +111,7 @@ def config():
     log_frequency = 1000
     print_frequency = 50
     starting_epoch = 1
-    num_kp = 100
+    num_kp = 1000
     dense_resoltuion = 2
     local_log_frequency = 50 
 
@@ -229,6 +229,7 @@ def main(_config, _run, seed):
     global EPOCH
     print('Loss Function Choice: {}'.format(_config['loss']))
     print('number of keypoint: {}'.format(_config['num_kp']))
+    print('initial learning rate : {}'.format(_config['BASE_LEARNING_RATE']))
 
     if _config['val_sequence'] is None:
         raise TypeError('val_sequences cannot be None')
@@ -628,7 +629,7 @@ def main(_config, _run, seed):
                 
                 #train_loss = train_local_loss / len(dataset_train)
                 ######### save network model for intermediate verification #####################  
-                if train_local_loss < 0.1:
+                if train_local_loss < 0.03:
                     #if val_loss < BEST_VAL_LOSS:
                 #    BEST_VAL_LOSS = val_loss
                     #_run.result = BEST_VAL_LOSS

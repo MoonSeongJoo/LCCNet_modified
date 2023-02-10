@@ -46,14 +46,10 @@ cotr_args = easydict.EasyDict({
                 "out_dir" : "general_config['out']",
                 # "load_weights" : "None",
 #                 "load_weights_path" : './COTR/out/default/checkpoint.pth.tar' ,
-<<<<<<< HEAD
-                "load_weights_path" : "/root/work/LCCNet_Moon/models/184_checkpoint.pth.tar",
-=======
-                "load_weights_path" : "/home/ubuntu/work/autocalib/considering_project/models/184_checkpoint.pth.tar",
->>>>>>> e1e9c5c89172482fa02b4739d186f6d917d11954
-                # "load_weights_path" : True ,
+                "load_weights_path" : "/root/work/LCCNet_Moon/models/200_checkpoint.pth.tar",
+                # "load_weights_path" : None,
                 "load_weights_freeze" : False ,
-                "max_corrs" : 100 ,
+                "max_corrs" : 1000 ,
                 "dim_feedforward" : 1024 , 
                 "backbone" : "resnet50" ,
                 "hidden_dim" : 256 ,
@@ -77,13 +73,8 @@ import easydict
 class MonoDepth():
     def __init__(self):
         self.model_name         = "mono_resnet50_640x192"
-<<<<<<< HEAD
         self.encoder_path       = os.path.join("/root/work/LCCNet_Moon/monodepth2/models", self.model_name, "encoder.pth")
         self.depth_decoder_path = os.path.join("/root/work/LCCNet_Moon/monodepth2/models", self.model_name, "depth.pth")
-=======
-        self.encoder_path       = os.path.join("/home/ubuntu/work/autocalib/considering_project/monodepth2/models", self.model_name, "encoder.pth")
-        self.depth_decoder_path = os.path.join("/home/ubuntu/work/autocalib/considering_project/monodepth2/models", self.model_name, "depth.pth")
->>>>>>> e1e9c5c89172482fa02b4739d186f6d917d11954
         
         # device = torch.device("cuda")
         self.encoder = monodepth2.networks.ResnetEncoder(50, False)
@@ -176,6 +167,7 @@ class LCCNet(nn.Module):
         
         if cotr_args.load_weights_freeze is True:
             print("COTR pre-trained weights freeze")
+            # self.corr.eval()
             for param in self.corr.parameters():
                 param.requires_grad = False
         
@@ -343,8 +335,8 @@ class LCCNet(nn.Module):
         
         # print("img_input dtype :" , img_input.dtype)
         # print("query dtype :" , query.dtype)
-        
-        corrs = self.corr(img_input, query)['pred_corrs']
+        with torch.no_grad():
+            corrs = self.corr(img_input, query)['pred_corrs']
 #         print ('pred_corrs[0] min ' , torch.min(corrs[:,0]))
 #         print ('pred_corrs[0] max ' , torch.max(corrs[:,0]))
 #         print ('pred_corrs[1] min ' , torch.min(corrs[:,1]))
