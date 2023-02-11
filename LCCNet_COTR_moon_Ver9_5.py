@@ -46,9 +46,9 @@ cotr_args = easydict.EasyDict({
                 "out_dir" : "general_config['out']",
                 # "load_weights" : "None",
 #                 "load_weights_path" : './COTR/out/default/checkpoint.pth.tar' ,
-                "load_weights_path" : "/root/work/LCCNet_Moon/models/200_checkpoint.pth.tar",
+                "load_weights_path" : "/home/ubuntu/work/autocalib/considering_project/models/200_checkpoint.pth.tar",
                 # "load_weights_path" : None,
-                "load_weights_freeze" : False ,
+                "load_weights_freeze" : True ,
                 "max_corrs" : 1000 ,
                 "dim_feedforward" : 1024 , 
                 "backbone" : "resnet50" ,
@@ -73,8 +73,8 @@ import easydict
 class MonoDepth():
     def __init__(self):
         self.model_name         = "mono_resnet50_640x192"
-        self.encoder_path       = os.path.join("/root/work/LCCNet_Moon/monodepth2/models", self.model_name, "encoder.pth")
-        self.depth_decoder_path = os.path.join("/root/work/LCCNet_Moon/monodepth2/models", self.model_name, "depth.pth")
+        self.encoder_path       = os.path.join("/home/ubuntu/work/autocalib/considering_project/monodepth2/models", self.model_name, "encoder.pth")
+        self.depth_decoder_path = os.path.join("/home/ubuntu/work/autocalib/considering_project/monodepth2/models", self.model_name, "depth.pth")
         
         # device = torch.device("cuda")
         self.encoder = monodepth2.networks.ResnetEncoder(50, False)
@@ -167,9 +167,9 @@ class LCCNet(nn.Module):
         
         if cotr_args.load_weights_freeze is True:
             print("COTR pre-trained weights freeze")
-            # self.corr.eval()
-            for param in self.corr.parameters():
-                param.requires_grad = False
+            self.corr.eval()
+            # for param in self.corr.parameters():
+            #     param.requires_grad = False
         
         
         self.leakyRELU = nn.LeakyReLU(0.1)

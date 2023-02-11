@@ -37,7 +37,7 @@ from sacred import Experiment
 from sacred.utils import apply_backspaces_and_linefeeds
 
 from DatasetLidarCamera_Ver9_5 import DatasetLidarCameraKittiOdometry
-from losses_Ver9_5 import DistancePoints3D, GeometricLoss, L1Loss, ProposedLoss, CombinedLoss
+from losses_Ver9_6 import DistancePoints3D, GeometricLoss, L1Loss, ProposedLoss, CombinedLoss
 
 
 from quaternion_distances import quaternion_distance
@@ -85,22 +85,22 @@ poses_path = "data_odometry_poses"
 def config():
     checkpoints = './checkpoints/'
     dataset = 'kitti/odom' # 'kitti/raw'
-    # data_folder = "/home/ubuntu/data/kitti_odometry"
-    data_folder = "/mnt/data/kitti_odometry"
+    data_folder = "/home/ubuntu/data/kitti_odometry"
+    # data_folder = "/mnt/data/kitti_odometry"
     use_reflectance = False
     val_sequence = 7
     epochs = 200
-    BASE_LEARNING_RATE = 8e-5 # 1e-4
+    BASE_LEARNING_RATE = 1e-4 # 1e-4
     loss = 'combined'
     max_t = 1.5 # 1.5, 1.0,  0.5,  0.2,  0.1
     max_r = 20.0 # 20.0, 10.0, 5.0,  2.0,  1.0
-    batch_size = 7 # 120
+    batch_size = 6 # 120
     num_worker = 16
     network = 'Res_f1'
     optimizer = 'adam'
     resume = True
-    weights = '/root/work/LCCNet_Moon/checkpoints/kitti/odom/val_seq_06/models/checkpoint_r20.00_t1.50_e9_0.002.tar'
-    # weights = None
+    # weights = '/root/work/LCCNet_Moon/checkpoints/kitti/odom/val_seq_06/models/checkpoint_r20.00_t1.50_e9_0.002.tar'
+    weights = None
     rescale_rot = 1.0  #LCCNet initail value = 1.0
     rescale_transl = 2.0  #LCCNet initatil value = 2.0
     precision = "O0"
@@ -170,6 +170,8 @@ def train(model, optimizer, rgb_input, dense_depth_input, corrs , target_transl,
     else: 
         losses.backward()
     
+    max_norm = 5
+    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm)
     optimizer.step()
 
     return losses, rot_err, transl_err
@@ -537,7 +539,7 @@ def main(_config, _run, seed):
         
             if _config['loss'] == 'points_distance' or _config['loss'] == 'combined':
                 local_loss += loss['total_loss'].item()
-                local_corr_loss += loss['corr_loss'].item()
+                # local_corr_loss += loss['corr_loss'].item()
                 local_pcl_loss += loss['point_clouds_loss'].item()
                 local_rot_loss += loss['rot_loss'].item()
                 local_trans_loss += loss['transl_loss'].item()
@@ -546,7 +548,7 @@ def main(_config, _run, seed):
                 local_loss += loss.item()
             
             train_local_loss = local_loss/50
-            train_corr_loss = local_corr_loss/50
+            # train_corr_loss = local_corr_loss/50
             train_pcl_loss = local_pcl_loss/50
             train_rot_loss = local_rot_loss/50
             train_trans_loss =local_trans_loss/50
@@ -611,7 +613,7 @@ def main(_config, _run, seed):
             if batch_idx % 50 == 0 and batch_idx != 0:
 
                 print(f'Iter {batch_idx}/{len(TrainImgLoader)} training loss = {train_local_loss:.6f}, '
-                      f'loss of corr = {train_corr_loss:.6f} ,'
+                    #   f'loss of corr = {train_corr_loss:.6f} ,'
                       f'loss of pcl = {train_pcl_loss:.6f} ,'
                       f'loss of rot = {train_rot_loss:.6f} ,'
                       f'loss of trans = {train_trans_loss:.6f} ,'
@@ -622,7 +624,7 @@ def main(_config, _run, seed):
                 time_for_50ep = time.time()
                 _run.log_scalar("Loss", local_loss/50, train_iter)
                 local_loss = 0.
-                local_corr_loss =  0.
+                # local_corr_loss =  0.
                 local_pcl_loss = 0.
                 local_rot_loss = 0.
                 local_trans_loss = 0.
@@ -656,7 +658,7 @@ def main(_config, _run, seed):
             
             if _config['loss'] == 'points_distance' or _config['loss'] == 'combined':
                 total_train_loss += loss['total_loss'].item() * len(sample['rgb'])
-                sum_corr_loss += loss['corr_loss'].item() * len(sample['rgb'])
+                # sum_corr_loss += loss['corr_loss'].item() * len(sample['rgb'])
                 sum_point_loss += loss['point_clouds_loss'].item() * len(sample['rgb'])
                 sum_trans_loss += loss['transl_loss'].item() * len(sample['rgb'])
                 sum_rot_loss += loss['rot_loss'] * len(sample['rgb'])
@@ -673,7 +675,7 @@ def main(_config, _run, seed):
         
         if _config['loss'] == 'combined':
             train_writer.add_scalar("Loss_Total", total_train_loss / len(dataset_train), epoch)
-            train_writer.add_scalar("correspondence_matching", sum_corr_loss / len(dataset_train) , epoch)
+            # train_writer.add_scalar("correspondence_matching", sum_corr_loss / len(dataset_train) , epoch)
             train_writer.add_scalar("Loss_Point_clouds", sum_point_loss / len(dataset_train), epoch)
             train_writer.add_scalar("Loss_Translation", sum_trans_loss /len(dataset_train), epoch)
             train_writer.add_scalar("Loss_Rotation", sum_rot_loss /len(dataset_train), epoch)
