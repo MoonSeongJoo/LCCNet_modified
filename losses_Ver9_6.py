@@ -113,11 +113,11 @@ class CombinedLoss(nn.Module):
         self.rescale_rot = rescale_rot
         self.transl_loss = nn.SmoothL1Loss(reduction='none')        
         self.weight_point_cloud = 0.5
-        self.weight_corr = 1.0
+        # self.weight_corr = 1.0
         self.weight_pose = 0.5
         self.loss = {} 
         print ( "------- loss weight point cloud -------- " , self.weight_point_cloud )
-        print ( "------- loss weight corr --------" , self.weight_corr )
+        # print ( "------- loss weight corr --------" , self.weight_corr )
         print ( "------- loss weight pose --------" , self.weight_pose )
 
 #     def forward(self, point_clouds, target_transl, target_rot, transl_err, rot_err):
@@ -198,23 +198,23 @@ class CombinedLoss(nn.Module):
             error.clamp(100.)
             point_clouds_loss += error.mean()
         
-        corr_loss = torch.nn.functional.mse_loss(corr_pred, corr_target)
+#         corr_loss = torch.nn.functional.mse_loss(corr_pred, corr_target)
         
-        if mask.sum() > 0:
-#             print('enter cyclic loss sum')
-            cycle_loss = torch.nn.functional.mse_loss(cycle[mask], queries[mask])
-            corr_loss += cycle_loss        
+#         if mask.sum() > 0:
+# #             print('enter cyclic loss sum')
+#             cycle_loss = torch.nn.functional.mse_loss(cycle[mask], queries[mask])
+#             corr_loss += cycle_loss        
         
         #end = time.time()
         #print("3D Distance Time: ", end-start)
+        # total_loss = self.weight_pose * pose_loss +\
+        #              self.weight_point_cloud * (point_clouds_loss/target_transl.shape[0]) + self.weight_corr * corr_loss
         total_loss = self.weight_pose * pose_loss +\
-                     self.weight_point_cloud * (point_clouds_loss/target_transl.shape[0]) + self.weight_corr * corr_loss
-#         total_loss = self.weight_pose * pose_loss +\
-#                      self.weight_point_cloud * (point_clouds_loss/target_transl.shape[0]) 
+                     self.weight_point_cloud * (point_clouds_loss/target_transl.shape[0]) 
         self.loss['total_loss'] = total_loss
         self.loss['transl_loss'] = loss_transl
         self.loss['rot_loss'] = loss_rot
         self.loss['point_clouds_loss'] = point_clouds_loss/target_transl.shape[0]
-        self.loss['corr_loss'] = corr_loss
+        # self.loss['corr_loss'] = corr_loss
         
         return self.loss
