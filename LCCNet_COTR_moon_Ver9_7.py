@@ -150,6 +150,9 @@ class LCCNet(nn.Module):
         input: md --- maximum displacement (for correlation. default: 4), after warpping
         """
         super(LCCNet, self).__init__()
+        
+        self.distanceList = []
+        
         self.num_kp = num_kp
         
         self.mono = MonoDepth() # depth estimation by monodepth2
@@ -386,6 +389,15 @@ class LCCNet(nn.Module):
         calib_flow_pred = F.pairwise_distance(query,corrs)
         calib_flow_gt = F.pairwise_distance(query,corr_target)
         valid = (valid >= 0.5) & (calib_flow_gt < 0.7)
+        
+        # ###### To do LSTM network ##############  
+        # self.distanceList.append(calib_flow_pred)
+        # if len(self.distanceList) > 5 :
+        #     self.distanceList = self.distanceList[1:6]
+        # #if len(self.distanceList) == 5 : 
+        #     #LSTM layer 5개 짜리 list
+        #     #5개가 다 되기 전에는 LSTM layer 실행 안하게....
+            
         
         # pred_corrs = torch.cat((query,corrs),dim=-1)
         x = self.leakyRELU(calib_flow_pred)

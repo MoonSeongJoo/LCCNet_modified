@@ -212,8 +212,9 @@ class CombinedLoss(nn.Module):
         # total_loss = self.weight_pose * pose_loss +\
         #              self.weight_point_cloud * (point_clouds_loss/target_transl.shape[0]) + self.weight_corr * corr_loss
         flow_loss = 0.0
-        for i in range(len(calib_flow_pred[1])):
-            i_weight = self.gamma**(len(calib_flow_pred[1]) - i - 1)
+        # print (f'lenght of flow n_predict:{len(calib_flow_pred[1])}')
+        for i in range(1000):
+            i_weight = self.gamma**(1000 - i - 1)
             i_loss = (calib_flow_pred[: , i] - calib_flow_gt[: , i]).abs()
             flow_loss += i_weight * (flow_valid[:, i] * i_loss).mean()
         
