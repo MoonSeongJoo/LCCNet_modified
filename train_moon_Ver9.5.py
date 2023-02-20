@@ -37,7 +37,7 @@ from sacred import Experiment
 from sacred.utils import apply_backspaces_and_linefeeds
 
 from DatasetLidarCamera_Ver9_5 import DatasetLidarCameraKittiOdometry
-from losses_Ver9_5 import DistancePoints3D, GeometricLoss, L1Loss, ProposedLoss, CombinedLoss
+from losses_Ver9_6 import DistancePoints3D, GeometricLoss, L1Loss, ProposedLoss, CombinedLoss
 
 
 from quaternion_distances import quaternion_distance
@@ -86,33 +86,38 @@ def config():
     checkpoints = './checkpoints/'
     dataset = 'kitti/odom' # 'kitti/raw'
     data_folder = "/home/ubuntu/data/kitti_odometry"
+<<<<<<< HEAD
     # data_folder = "/mnt/sgvrnas/sjmoon/kitti/kitti_odometry"
+=======
+    # data_folder = "/mnt/data/kitti_odometry"
+>>>>>>> 0b04013d43288712cb59d03ea07984d1345bb0fb
     use_reflectance = False
-    val_sequence = 6
+    val_sequence = 7
     epochs = 200
     BASE_LEARNING_RATE = 1e-4 # 1e-4
     loss = 'combined'
     max_t = 1.5 # 1.5, 1.0,  0.5,  0.2,  0.1
     max_r = 20.0 # 20.0, 10.0, 5.0,  2.0,  1.0
-    batch_size = 10  # 120
-    num_worker = 10
+    batch_size = 6 # 120
+    num_worker = 16
     network = 'Res_f1'
     optimizer = 'adam'
     resume = True
-    # weights = '/home/seongjoo/work/autocalib/LCCNet_Moon/considering_project/models/66_checkpoint.pth.tar'
+    # weights = '/root/work/LCCNet_Moon/checkpoints/kitti/odom/val_seq_06/models/checkpoint_r20.00_t1.50_e9_0.002.tar'
     weights = None
-    rescale_rot = 2
-    rescale_transl = 1
+    rescale_rot = 1.0  #LCCNet initail value = 1.0
+    rescale_transl = 2.0  #LCCNet initatil value = 2.0
     precision = "O0"
     norm = 'bn'
     dropout = 0.0
     max_depth = 80.
-    weight_point_cloud = 0.3
+    weight_point_cloud = 0.1 # 이값은 무시해도 됨 loss function에서 직접 관장 원래 LCCNet initail = 0.5
     log_frequency = 1000
     print_frequency = 50
     starting_epoch = 1
-    num_kp = 100
+    num_kp = 1000
     dense_resoltuion = 2
+    local_log_frequency = 50 
 
 # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 os.environ["CUDA_VISIBLE_DEVICES"] = '0'
@@ -169,6 +174,8 @@ def train(model, optimizer, rgb_input, dense_depth_input, corrs , target_transl,
     else: 
         losses.backward()
     
+    max_norm = 5
+    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm)
     optimizer.step()
 
     return losses, rot_err, transl_err
@@ -228,6 +235,7 @@ def main(_config, _run, seed):
     global EPOCH
     print('Loss Function Choice: {}'.format(_config['loss']))
     print('number of keypoint: {}'.format(_config['num_kp']))
+    print('initial learning rate : {}'.format(_config['BASE_LEARNING_RATE']))
 
     if _config['val_sequence'] is None:
         raise TypeError('val_sequences cannot be None')
@@ -352,8 +360,8 @@ def main(_config, _run, seed):
         raise TypeError("Network unknown")
     if _config['weights'] is not None:
         print(f"Loading weights from {_config['weights']}")
-        checkpoint = torch.load(_config['weights'], map_location='gpu')
-        checkpoint = torch.load(_config['weights'], map_location='')
+        checkpoint = torch.load(_config['weights'], map_location='cuda:0')
+        # checkpoint = torch.load(_config['weights'], map_location='')
         print('-------checkpoint-keys-------',checkpoint.keys() )
         saved_state_dict = checkpoint['state_dict']
         model.load_state_dict(saved_state_dict)
@@ -400,8 +408,18 @@ def main(_config, _run, seed):
         print('This is %d-th epoch' % epoch)
         epoch_start_time = time.time()
         
-        total_train_loss = 0
+        total_train_loss = 0.
+        sum_corr_loss = 0. 
+        sum_point_loss = 0. 
+        sum_trans_loss = 0.
+        sum_rot_loss = 0.
+         
         local_loss = 0.
+        local_corr_loss = 0.
+        local_rot_loss = 0.
+        local_trans_loss = 0.
+        local_pcl_loss = 0. 
+        
         total_val_loss = 0.
         total_val_t = 0.
         total_val_r = 0.
@@ -410,7 +428,7 @@ def main(_config, _run, seed):
             _run.log_scalar("LR", _config['BASE_LEARNING_RATE'] *
                             math.exp((1 - epoch) * 4e-2), epoch)
             for param_group in optimizer.param_groups:
-                param_group['lr'] = _config['BASE_LEARNING_RATE'] *                                     math.exp((1 - epoch) * 4e-2)
+                param_group['lr'] = _config['BASE_LEARNING_RATE'] * math.exp((1 - epoch) * 4e-2)
         else:
             #scheduler.step(epoch%100)
             _run.log_scalar("LR", scheduler.get_lr()[0])
@@ -525,10 +543,20 @@ def main(_config, _run, seed):
         
             if _config['loss'] == 'points_distance' or _config['loss'] == 'combined':
                 local_loss += loss['total_loss'].item()
+                # local_corr_loss += loss['corr_loss'].item()
+                local_pcl_loss += loss['point_clouds_loss'].item()
+                local_rot_loss += loss['rot_loss'].item()
+                local_trans_loss += loss['transl_loss'].item()
+                
             else :
                 local_loss += loss.item()
             
             train_local_loss = local_loss/50
+            # train_corr_loss = local_corr_loss/50
+            train_pcl_loss = local_pcl_loss/50
+            train_rot_loss = local_rot_loss/50
+            train_trans_loss =local_trans_loss/50
+            
 
 #             if batch_idx % _config['log_frequency'] == 0:
 #                 show_idx = 0
@@ -588,17 +616,26 @@ def main(_config, _run, seed):
             
             if batch_idx % 50 == 0 and batch_idx != 0:
 
-                print(f'Iter {batch_idx}/{len(TrainImgLoader)} training loss = {local_loss/50:.3f}, '
+                print(f'Iter {batch_idx}/{len(TrainImgLoader)} training loss = {train_local_loss:.6f}, '
+                    #   f'loss of corr = {train_corr_loss:.6f} ,'
+                      f'loss of pcl = {train_pcl_loss:.6f} ,'
+                      f'loss of rot = {train_rot_loss:.6f} ,'
+                      f'loss of trans = {train_trans_loss:.6f} ,'
                       f'time = {(time.time() - start_time)/rgb_input.shape[0]:.4f}, '
-                      #f'time_preprocess = {(end_preprocess-start_preprocess)/lidar_input.shape[0]:.4f}, '
-                      f'time for 50 iter: {time.time()-time_for_50ep:.4f}')
+                    #   f'time_preprocess = {(end_preprocess-start_preprocess)/rgb_input.shape[0]:.4f}, '
+                      f'time for 50 iter: {time.time()-time_for_50ep:.4f} ')
+                
                 time_for_50ep = time.time()
                 _run.log_scalar("Loss", local_loss/50, train_iter)
                 local_loss = 0.
+                # local_corr_loss =  0.
+                local_pcl_loss = 0.
+                local_rot_loss = 0.
+                local_trans_loss = 0.
                 
                 #train_loss = train_local_loss / len(dataset_train)
                 ######### save network model for intermediate verification #####################  
-                if train_local_loss < 0.1:
+                if train_local_loss < 0.03:
                     #if val_loss < BEST_VAL_LOSS:
                 #    BEST_VAL_LOSS = val_loss
                     #_run.result = BEST_VAL_LOSS
@@ -618,13 +655,17 @@ def main(_config, _run, seed):
                         'val_loss': total_val_loss / len(dataset_val),
                     }, savefilename)
                     print(f'Model saved as {savefilename}')
-                    if old_save_filename is not None:
-                        if os.path.exists(old_save_filename):
-                            os.remove(old_save_filename)
-                    old_save_filename = savefilename                
+                    # if old_save_filename is not None:
+                    #     if os.path.exists(old_save_filename):
+                    #         os.remove(old_save_filename)
+                    # old_save_filename = savefilename                
             
             if _config['loss'] == 'points_distance' or _config['loss'] == 'combined':
                 total_train_loss += loss['total_loss'].item() * len(sample['rgb'])
+                # sum_corr_loss += loss['corr_loss'].item() * len(sample['rgb'])
+                sum_point_loss += loss['point_clouds_loss'].item() * len(sample['rgb'])
+                sum_trans_loss += loss['transl_loss'].item() * len(sample['rgb'])
+                sum_rot_loss += loss['rot_loss'] * len(sample['rgb'])
             else : 
                 total_train_loss += loss.item() * len(sample['rgb'])
             train_iter += 1
@@ -638,6 +679,10 @@ def main(_config, _run, seed):
         
         if _config['loss'] == 'combined':
             train_writer.add_scalar("Loss_Total", total_train_loss / len(dataset_train), epoch)
+            # train_writer.add_scalar("correspondence_matching", sum_corr_loss / len(dataset_train) , epoch)
+            train_writer.add_scalar("Loss_Point_clouds", sum_point_loss / len(dataset_train), epoch)
+            train_writer.add_scalar("Loss_Translation", sum_trans_loss /len(dataset_train), epoch)
+            train_writer.add_scalar("Loss_Rotation", sum_rot_loss /len(dataset_train), epoch)
         else : 
             train_writer.add_scalar("Loss_Total", loss.item(), train_iter)
 
@@ -697,6 +742,15 @@ def main(_config, _run, seed):
                 dense_depth_img = dense_depth_img.astype(np.uint8)
                 dense_depth_img_color = colormap(dense_depth_img)
                 dense_depth_img_color = transforms.ToTensor()(dense_depth_img_color)                
+<<<<<<< HEAD
+=======
+                
+                lidarOnImage = np.hstack([uv, z])
+                dense_depth_img = dense_map(lidarOnImage.T , real_shape[1], real_shape[0] , _config['dense_resoltuion']) # argument = (lidarOnImage.T , 1241, 376 , 8)
+                dense_depth_img = dense_depth_img.astype(np.uint8)
+                dense_depth_img_color = colormap(dense_depth_img)
+                dense_depth_img_color = transforms.ToTensor()(dense_depth_img_color)  
+>>>>>>> 0b04013d43288712cb59d03ea07984d1345bb0fb
                 
                 # PAD ONLY ON RIGHT AND BOTTOM SIDE
                 shape_pad = [0, 0, 0, 0]
@@ -811,7 +865,7 @@ def main(_config, _run, seed):
             torch.save({
                 'config': _config,
                 'epoch': epoch,
-                # 'state_dict': model.state_dict(), # single gpu
+                'state_dict': model.state_dict(), # single gpu
                 'state_dict': model.module.state_dict(), # multi gpu
                 'optimizer': optimizer.state_dict(),
                 'train_loss': total_train_loss / len(dataset_train),

@@ -22,7 +22,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torchvision.transforms import functional as tvtf
 import math
-import argparse
+import argparse 
 import os
 import os.path
 import matplotlib.pyplot as plt
@@ -44,12 +44,19 @@ import monodepth2.networks
         
 cotr_args = easydict.EasyDict({
                 "out_dir" : "general_config['out']",
-                "load_weights" : "None",
+                # "load_weights" : "None",
 #                 "load_weights_path" : './COTR/out/default/checkpoint.pth.tar' ,
+<<<<<<< HEAD
                 "load_weights_path" : "/home/ubuntu/work/autocalib/considering_project/models/98_checkpoint.pth.tar",
                 # "load_weights_path" : True ,
                 "load_weights_freeze" : False ,
                 "max_corrs" : 100 ,
+=======
+                "load_weights_path" : "/home/ubuntu/work/autocalib/considering_project/models/200_checkpoint.pth.tar",
+                # "load_weights_path" : None,
+                "load_weights_freeze" : True ,
+                "max_corrs" : 1000 ,
+>>>>>>> 0b04013d43288712cb59d03ea07984d1345bb0fb
                 "dim_feedforward" : 1024 , 
                 "backbone" : "resnet50" ,
                 "hidden_dim" : 256 ,
@@ -167,8 +174,9 @@ class LCCNet(nn.Module):
         
         if cotr_args.load_weights_freeze is True:
             print("COTR pre-trained weights freeze")
-            for param in self.corr.parameters():
-                param.requires_grad = False
+            self.corr.eval()
+            # for param in self.corr.parameters():
+            #     param.requires_grad = False
         
         
         self.leakyRELU = nn.LeakyReLU(0.1)
@@ -295,23 +303,23 @@ class LCCNet(nn.Module):
         
         rgb_pred_input = torch.stack(rgb_pred_input)
         # print ("rgb_pred_input_shape =" , rgb_pred_input.shape)       
-#         ####### display input signal #########        
-#         plt.figure(figsize=(10, 10))
-#         plt.subplot(311)
-#         plt.imshow(torchvision.utils.make_grid(rgb_input).permute(1,2,0).cpu().numpy())
-#         plt.title("RGB_input", fontsize=22)
-#         plt.axis('off')
+        # ####### display input signal #########        
+        # plt.figure(figsize=(10, 10))
+        # plt.subplot(311)
+        # plt.imshow(torchvision.utils.make_grid(rgb_input).permute(1,2,0).cpu().numpy())
+        # plt.title("RGB_input", fontsize=22)
+        # plt.axis('off')
         
-#         plt.subplot(312)
-#         plt.imshow(torchvision.utils.make_grid(rgb_pred_input).permute(1,2,0).cpu().numpy() , cmap='magma')
-#         plt.title("rgb_depth_pred ", fontsize=22)
-#         plt.axis('off')
+        # plt.subplot(312)
+        # plt.imshow(torchvision.utils.make_grid(rgb_pred_input).permute(1,2,0).cpu().numpy() , cmap='magma')
+        # plt.title("rgb_depth_pred ", fontsize=22)
+        # plt.axis('off')
         
-#         plt.subplot(313)
-#         plt.imshow(torchvision.utils.make_grid(depth_input).permute(1,2,0).cpu().numpy() , cmap='magma')
-#         plt.title("dense_depth_input", fontsize=22)
-#         plt.axis('off')        
-#         ############# end of display input signal ###################
+        # plt.subplot(313)
+        # plt.imshow(torchvision.utils.make_grid(depth_input).permute(1,2,0).cpu().numpy() , cmap='magma')
+        # plt.title("dense_depth_input", fontsize=22)
+        # plt.axis('off')        
+        # ############# end of display input signal ###################
         
         rgb_pred_input = rgb_pred_input.permute(0,2,3,1)
         rgb_pred_input = rgb_pred_input.type(torch.float32)
@@ -334,23 +342,23 @@ class LCCNet(nn.Module):
         
         # print("img_input dtype :" , img_input.dtype)
         # print("query dtype :" , query.dtype)
-        
-        corrs = self.corr(img_input, query)['pred_corrs']
+        with torch.no_grad():
+            corrs = self.corr(img_input, query)['pred_corrs']
 #         print ('pred_corrs[0] min ' , torch.min(corrs[:,0]))
 #         print ('pred_corrs[0] max ' , torch.max(corrs[:,0]))
 #         print ('pred_corrs[1] min ' , torch.min(corrs[:,1]))
 #         print ('pred_corrs[1] max ' , torch.max(corrs[:,1]))
         
-        # ##### display corrs images #############
-        # corrs_cpu = corrs.cpu().detach().numpy()
-        # query_cpu = query.cpu().detach().numpy()
-        # corr_target_cpu = corr_target.cpu().detach().numpy()
+        ##### display corrs images #############
+        corrs_cpu = corrs.cpu().detach().numpy()
+        query_cpu = query.cpu().detach().numpy()
+        corr_target_cpu = corr_target.cpu().detach().numpy()
         
-        # pred_corrs = np.concatenate([query_cpu, corrs_cpu], axis=-1)
-        # pred_corrs , draw_pred_out = self.draw_corrs(img_cpu, pred_corrs)
+        pred_corrs = np.concatenate([query_cpu, corrs_cpu], axis=-1)
+        pred_corrs , draw_pred_out = self.draw_corrs(img_cpu, pred_corrs)
         
-        # target_corrs = np.concatenate([query_cpu, corr_target_cpu], axis=-1)
-        # target_corrs , draw_target_out = self.draw_corrs(img_cpu, target_corrs)
+        target_corrs = np.concatenate([query_cpu, corr_target_cpu], axis=-1)
+        target_corrs , draw_target_out = self.draw_corrs(img_cpu, target_corrs)
 
         # print ('------------- display start for analysis-------------')
         # plt.figure(figsize=(20, 40))

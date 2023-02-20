@@ -7,8 +7,8 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
-import os,sys
-sys.path.append("/root/work/LCCNet_Moon/COTR")
+# import os,sys
+# sys.path.append("/root/work/LCCNet_Moon/COTR")
 
 from .misc import NestedTensor
 #from misc import NestedTensor

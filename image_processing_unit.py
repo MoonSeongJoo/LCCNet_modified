@@ -158,6 +158,39 @@ def corr_gen( gt_points_index, points_index, gt_uv, uv , num_kp = 500) :
     
     return corrs
 
+def corr_gen_withZ( gt_points_index, points_index, gt_uv, uv , gt_z, z, num_kp = 500) :
+    
+    inter_gt_uv_mask = np.in1d(gt_points_index , points_index)
+    inter_uv_mask    = np.in1d(points_index , gt_points_index)
+    gt_uv = gt_uv[inter_gt_uv_mask]
+    uv    = uv[inter_uv_mask] 
+    gt_z = gt_z[inter_gt_uv_mask]
+    z    = z[inter_uv_mask] 
+    gt_uvz = np.concatenate([gt_uv,gt_z], axis=1)
+    uvz=np.concatenate([uv,z],axis=1)
+    corrs = np.concatenate([gt_uvz, uvz], axis=1)
+    corrs = torch.tensor(corrs)
+
+    corrs[:, 0] = (0.5*corrs[:, 0])/1280
+    corrs[:, 1] = (0.5*corrs[:, 1])/384
+    corrs[:, 3] = (0.5*corrs[:, 3])/1280 + 0.5        
+    corrs[:, 4] = (0.5*corrs[:, 4])/384   
+
+    if corrs.shape[0] <= num_kp :
+        corrs = torch.zeros(num_kp, 6)
+        # corrs[:, 2] = corrs[:, 2] + 0.5 # for only uv matching
+        corrs[:, 3] = corrs[:, 3] + 0.5 # for uvz matching
+
+    corrs_knn_idx = knn(corrs[:,:3], corrs[:,3:], num_kp) # knn 2d point-cloud trim
+    corrs = corrs[corrs_knn_idx]               
+
+    assert (0.0 <= corrs[:, 0]).all() and (corrs[:, 0] <= 0.5).all()
+    assert (0.0 <= corrs[:, 1]).all() and (corrs[:, 1] <= 1.0).all()
+    assert (0.5 <= corrs[:, 3]).all() and (corrs[:, 3] <= 1.0).all()
+    assert (0.0 <= corrs[:, 4]).all() and (corrs[:, 4] <= 1.0).all()
+    
+    return corrs
+
 # for displying correspondence matching 
 def draw_corrs(self, imgs, corrs, col=(255, 0, 0)):
     imgs = utils.torch_img_to_np_img(imgs)

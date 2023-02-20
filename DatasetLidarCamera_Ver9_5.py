@@ -107,8 +107,8 @@ class DatasetLidarCameraKittiOdometry(Dataset):
         # self.model.principal_point = [6.071928e+02, 1.852157e+02]
         # for seq in ['00', '03', '05', '06', '07', '08', '09']:
         for seq in self.sequence_list:
-            # odom = odometry(self.calib_path_total,self.poses_path_total, seq)
-            odom = odometry(self.calib_path_total, seq)
+            odom = odometry(self.calib_path_total,seq)
+            # odom = odometry(self.calib_path_total, self.poses_path_total, seq)
             calib = odom.calib
             T_cam02_velo_np = calib.T_cam2_velo #gt pose from cam02 to velo_lidar (T_cam02_velo: 4x4)
             self.K[seq] = calib.K_cam2 # 3x3

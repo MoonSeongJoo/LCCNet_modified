@@ -23,13 +23,16 @@ class COTR(nn.Module):
         self.transformer = transformer
         hidden_dim = transformer.d_model
         self.corr_embed = MLP(hidden_dim, hidden_dim, 2, 3)
-        self.query_proj = NerfPositionalEncoding(hidden_dim // 4, sine_type)
+        # self.corr_embed = MLP(hidden_dim, hidden_dim, 2, 3)
+        # self.query_proj = NerfPositionalEncoding(hidden_dim // 4, sine_type)
+        self.query_proj = NerfPositionalEncoding(hidden_dim // 6, sine_type)
+        # self.query_proj = NerfPositionalEncoding(50, sine_type)
         self.input_proj = nn.Conv2d(backbone.num_channels, hidden_dim, kernel_size=1)
         self.backbone = backbone
 
     def forward(self, samples: NestedTensor, queries):
 #         print ("sampels_shape" , samples.shape)
-#         print ("queries_shape" , queries.shape)
+        print ("queries_shape1" , queries.shape)
         if isinstance(samples, (list, torch.Tensor)):
             samples = nested_tensor_from_tensor_list(samples)
         features, pos = self.backbone(samples)
@@ -38,13 +41,16 @@ class COTR(nn.Module):
         assert mask is not None
 #         print ("src_shape" , src.shape)
 #         print ("mask_shape" , mask.shape)
-#         print ("queries_shape" , queries.shape)
+        print ("queries_shape2" , queries.shape)
 #         print("pos_shape" , pos.shape)
         
         _b, _q, _ = queries.shape
-        queries = queries.reshape(-1, 2)
-        queries = self.query_proj(queries).reshape(_b, _q, -1)
+        # queries = queries.reshape(-1, 2)
+        queries = queries.reshape(-1, 3)
+        queries = self.query_proj(queries)
+        queries = queries.reshape(_b, _q, -1)
         queries = queries.permute(1, 0, 2)
+        queries = torch.tensor(queries ,dtype=torch.float32)
         tr_input= self.input_proj(src)
 #         print ("tr_input", tr_input.shape)
 #         print ("queries_after_shape" , queries.shape)
