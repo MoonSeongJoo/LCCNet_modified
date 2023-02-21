@@ -90,7 +90,7 @@ def config():
     use_reflectance = False
     val_sequence = 6
     epochs = 200
-    BASE_LEARNING_RATE = 1e-4 # 1e-4
+    BASE_LEARNING_RATE = 5e-5 # 1e-4
     loss = 'combined'
     max_t = 1.5 # 1.5, 1.0,  0.5,  0.2,  0.1
     max_r = 20.0 # 20.0, 10.0, 5.0,  2.0,  1.0
@@ -376,8 +376,11 @@ def main(_config, _run, seed):
     if _config['optimizer'] == 'adam':
         optimizer = optim.Adam(parameters, lr=_config['BASE_LEARNING_RATE'], weight_decay=5e-6)
         # Probably this scheduler is not used
-        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[20, 50, 70], gamma=0.5)
+        # scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[20, 50, 70], gamma=0.5)
+        scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=3e-4 , steps_per_epoch=10 ,epochs=_config['epochs'] , anneal_strategy ='cos')
 #         scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[20, 50, 70], gamma=0.3)
+    # if _config['optimizer'] == 'adamW':
+        
     else:
         optimizer = optim.SGD(parameters, lr=_config['BASE_LEARNING_RATE'], momentum=0.9,
                               weight_decay=5e-6, nesterov=True)
@@ -631,7 +634,7 @@ def main(_config, _run, seed):
                 
                 #train_loss = train_local_loss / len(dataset_train)
                 ######### save network model for intermediate verification #####################  
-                if train_local_loss < 0.03:
+                if train_local_loss < 2.6 :
                     #if val_loss < BEST_VAL_LOSS:
                 #    BEST_VAL_LOSS = val_loss
                     #_run.result = BEST_VAL_LOSS
