@@ -98,7 +98,7 @@ def config():
     num_worker = 16
     network = 'Res_f1'
     optimizer = 'adamW'
-    resume = True
+    resume = False
     # weights = '/root/work/LCCNet_Moon/checkpoints/kitti/odom/val_seq_06/models/checkpoint_r20.00_t1.50_e9_0.002.tar'
     weights = None
     rescale_rot = 1.0  #LCCNet initail value = 1.0
