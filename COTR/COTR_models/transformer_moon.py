@@ -182,7 +182,7 @@ class TransformerDecoderLayer(nn.Module):
         self.activation = _get_activation_fn(activation)
 
     def with_pos_embed(self, tensor, pos: Optional[Tensor]):
-        return tensor if pos is None else tensor + pos
+       return tensor if pos is None else tensor + pos
 
     def forward(self, tgt, memory,
                 tgt_mask: Optional[Tensor] = None,
@@ -192,7 +192,7 @@ class TransformerDecoderLayer(nn.Module):
                 pos: Optional[Tensor] = None,
                 query_pos: Optional[Tensor] = None):
 #         print("----------Decoder_tgt_shape-----------------------",tgt.shape)
-#         print("----------Decoder_query_pos_shape-----------------",query_pos.shape)
+        # print("----------Decoder_query_pos_shape-----------------",query_pos.shape)
 #         print("----------Decoder_memory_shape--------------------",memory.shape)
 #         print("----------Decoder_pos_shape-----------------------",pos.shape)
 #         print("----------Decoder_memory_key_padding_mask---------",memory_key_padding_mask.shape)

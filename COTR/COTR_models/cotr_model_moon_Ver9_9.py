@@ -22,7 +22,7 @@ class COTR(nn.Module):
         super().__init__()
         self.transformer = transformer
         hidden_dim = transformer.d_model
-        self.corr_embed = MLP(hidden_dim, hidden_dim, 2, 3)
+        self.corr_embed = MLP(hidden_dim, hidden_dim, 3, 3)
         # self.corr_embed = MLP(hidden_dim, hidden_dim, 2, 3)
         # self.query_proj = NerfPositionalEncoding(hidden_dim // 4, sine_type)
         self.query_proj = NerfPositionalEncoding(hidden_dim // 6, sine_type)
@@ -32,7 +32,7 @@ class COTR(nn.Module):
 
     def forward(self, samples: NestedTensor, queries):
 #         print ("sampels_shape" , samples.shape)
-        print ("queries_shape1" , queries.shape)
+        # print ("queries_shape1" , queries.shape)
         if isinstance(samples, (list, torch.Tensor)):
             samples = nested_tensor_from_tensor_list(samples)
         features, pos = self.backbone(samples)
@@ -41,7 +41,7 @@ class COTR(nn.Module):
         assert mask is not None
 #         print ("src_shape" , src.shape)
 #         print ("mask_shape" , mask.shape)
-        print ("queries_shape2" , queries.shape)
+        # print ("queries_shape2" , queries.shape)
 #         print("pos_shape" , pos.shape)
         
         _b, _q, _ = queries.shape

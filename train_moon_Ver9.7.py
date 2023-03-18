@@ -36,8 +36,8 @@ from torchvision.transforms import functional as tvtf
 from sacred import Experiment
 from sacred.utils import apply_backspaces_and_linefeeds
 
-from DatasetLidarCamera_Ver9_5 import DatasetLidarCameraKittiOdometry
-from losses_Ver9_6 import DistancePoints3D, GeometricLoss, L1Loss, ProposedLoss, CombinedLoss
+from DatasetLidarCamera_Ver9_7 import DatasetLidarCameraKittiOdometry
+from losses_Ver9_7 import DistancePoints3D, GeometricLoss, L1Loss, ProposedLoss, CombinedLoss
 
 
 from quaternion_distances import quaternion_distance
@@ -48,7 +48,7 @@ from utils import (mat2xyzrpy, merge_inputs, overlay_imgs, quat2mat,
                    tvector2mat)
 
 from image_processing_unit import lidar_project_depth , corr_gen , dense_map , colormap
-from LCCNet_COTR_moon_Ver9_5 import LCCNet
+from LCCNet_COTR_moon_Ver9_7 import LCCNet
 from COTR.inference.sparse_engine_Ver3 import SparseEngine
 import warnings
 warnings.filterwarnings('ignore')
@@ -86,19 +86,15 @@ def config():
     checkpoints = './checkpoints/'
     dataset = 'kitti/odom' # 'kitti/raw'
     data_folder = "/home/ubuntu/data/kitti_odometry"
-<<<<<<< HEAD
-    # data_folder = "/mnt/sgvrnas/sjmoon/kitti/kitti_odometry"
-=======
     # data_folder = "/mnt/data/kitti_odometry"
->>>>>>> 0b04013d43288712cb59d03ea07984d1345bb0fb
     use_reflectance = False
-    val_sequence = 7
+    val_sequence = 6
     epochs = 200
-    BASE_LEARNING_RATE = 1e-4 # 1e-4
+    BASE_LEARNING_RATE = 5e-5 # 1e-4
     loss = 'combined'
     max_t = 1.5 # 1.5, 1.0,  0.5,  0.2,  0.1
     max_r = 20.0 # 20.0, 10.0, 5.0,  2.0,  1.0
-    batch_size = 6 # 120
+    batch_size = 5 # 120
     num_worker = 16
     network = 'Res_f1'
     optimizer = 'adam'
@@ -154,7 +150,7 @@ def train(model, optimizer, rgb_input, dense_depth_input, corrs , target_transl,
 
     # Run model
     #transl_err, rot_err = model(rgb_img, refl_img)
-    transl_err, rot_err , corr_pred , cycle , mask = model(rgb_input, dense_depth_input, queries , corr_target)
+    transl_err, rot_err , flow_pred , flow_gt , valid = model(rgb_input, dense_depth_input, queries , corr_target)
     """
     print("transl_err==========",transl_err)
     print("rot_err=============",rot_err)
@@ -164,7 +160,7 @@ def train(model, optimizer, rgb_input, dense_depth_input, corrs , target_transl,
     """
     
     if loss == 'points_distance' or loss == 'combined':
-        losses = loss_fn(point_clouds, target_transl, target_rot, transl_err, rot_err , corr_target , corr_pred , queries ,cycle, mask)
+        losses = loss_fn(point_clouds, target_transl, target_rot, transl_err, rot_err , flow_pred , flow_gt, valid)
     else:
         losses = loss_fn(target_transl, target_rot, transl_err, rot_err)
     
@@ -195,10 +191,10 @@ def val(model, rgb_input, dense_depth_input ,corrs ,target_transl, target_rot, l
     # Run model
     with torch.no_grad():
         #transl_err, rot_err = model(rgb_img, refl_img)
-        transl_err, rot_err,corr_pred ,cycle , mask = model(rgb_input,dense_depth_input, queries ,corr_target)
+        transl_err, rot_err, flow_pred ,flow_gt , valid = model(rgb_input, dense_depth_input, queries ,corr_target)
 
     if loss == 'points_distance' or loss == 'combined':
-        losses = loss_fn(point_clouds, target_transl, target_rot, transl_err, rot_err, corr_target , corr_pred ,queries ,cycle, mask)
+        losses = loss_fn(point_clouds, target_transl, target_rot, transl_err, rot_err, flow_pred , flow_gt ,valid )
     else:
         losses = loss_fn(target_transl, target_rot, transl_err, rot_err)
 
@@ -380,8 +376,11 @@ def main(_config, _run, seed):
     if _config['optimizer'] == 'adam':
         optimizer = optim.Adam(parameters, lr=_config['BASE_LEARNING_RATE'], weight_decay=5e-6)
         # Probably this scheduler is not used
-        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[20, 50, 70], gamma=0.5)
+        # scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[20, 50, 70], gamma=0.5)
+        scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=3e-4 , steps_per_epoch=10 ,epochs=_config['epochs'] , anneal_strategy ='cos')
 #         scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[20, 50, 70], gamma=0.3)
+    # if _config['optimizer'] == 'adamW':
+        
     else:
         optimizer = optim.SGD(parameters, lr=_config['BASE_LEARNING_RATE'], momentum=0.9,
                               weight_decay=5e-6, nesterov=True)
@@ -409,13 +408,13 @@ def main(_config, _run, seed):
         epoch_start_time = time.time()
         
         total_train_loss = 0.
-        sum_corr_loss = 0. 
+        sum_flow_loss = 0. 
         sum_point_loss = 0. 
         sum_trans_loss = 0.
         sum_rot_loss = 0.
          
         local_loss = 0.
-        local_corr_loss = 0.
+        local_flow_loss = 0.
         local_rot_loss = 0.
         local_trans_loss = 0.
         local_pcl_loss = 0. 
@@ -543,7 +542,7 @@ def main(_config, _run, seed):
         
             if _config['loss'] == 'points_distance' or _config['loss'] == 'combined':
                 local_loss += loss['total_loss'].item()
-                # local_corr_loss += loss['corr_loss'].item()
+                local_flow_loss += loss['flow_loss'].item()
                 local_pcl_loss += loss['point_clouds_loss'].item()
                 local_rot_loss += loss['rot_loss'].item()
                 local_trans_loss += loss['transl_loss'].item()
@@ -552,7 +551,7 @@ def main(_config, _run, seed):
                 local_loss += loss.item()
             
             train_local_loss = local_loss/50
-            # train_corr_loss = local_corr_loss/50
+            train_flow_loss = local_flow_loss/50
             train_pcl_loss = local_pcl_loss/50
             train_rot_loss = local_rot_loss/50
             train_trans_loss =local_trans_loss/50
@@ -617,7 +616,7 @@ def main(_config, _run, seed):
             if batch_idx % 50 == 0 and batch_idx != 0:
 
                 print(f'Iter {batch_idx}/{len(TrainImgLoader)} training loss = {train_local_loss:.6f}, '
-                    #   f'loss of corr = {train_corr_loss:.6f} ,'
+                      f'loss of flow = {train_flow_loss:.6f} ,'
                       f'loss of pcl = {train_pcl_loss:.6f} ,'
                       f'loss of rot = {train_rot_loss:.6f} ,'
                       f'loss of trans = {train_trans_loss:.6f} ,'
@@ -628,14 +627,14 @@ def main(_config, _run, seed):
                 time_for_50ep = time.time()
                 _run.log_scalar("Loss", local_loss/50, train_iter)
                 local_loss = 0.
-                # local_corr_loss =  0.
+                local_flow_loss =  0.
                 local_pcl_loss = 0.
                 local_rot_loss = 0.
                 local_trans_loss = 0.
                 
                 #train_loss = train_local_loss / len(dataset_train)
                 ######### save network model for intermediate verification #####################  
-                if train_local_loss < 0.03:
+                if train_local_loss < 2.6 :
                     #if val_loss < BEST_VAL_LOSS:
                 #    BEST_VAL_LOSS = val_loss
                     #_run.result = BEST_VAL_LOSS
@@ -662,7 +661,7 @@ def main(_config, _run, seed):
             
             if _config['loss'] == 'points_distance' or _config['loss'] == 'combined':
                 total_train_loss += loss['total_loss'].item() * len(sample['rgb'])
-                # sum_corr_loss += loss['corr_loss'].item() * len(sample['rgb'])
+                sum_flow_loss += loss['flow_loss'].item() * len(sample['rgb'])
                 sum_point_loss += loss['point_clouds_loss'].item() * len(sample['rgb'])
                 sum_trans_loss += loss['transl_loss'].item() * len(sample['rgb'])
                 sum_rot_loss += loss['rot_loss'] * len(sample['rgb'])
@@ -679,7 +678,7 @@ def main(_config, _run, seed):
         
         if _config['loss'] == 'combined':
             train_writer.add_scalar("Loss_Total", total_train_loss / len(dataset_train), epoch)
-            # train_writer.add_scalar("correspondence_matching", sum_corr_loss / len(dataset_train) , epoch)
+            train_writer.add_scalar("Loss_flow", sum_flow_loss / len(dataset_train) , epoch)
             train_writer.add_scalar("Loss_Point_clouds", sum_point_loss / len(dataset_train), epoch)
             train_writer.add_scalar("Loss_Translation", sum_trans_loss /len(dataset_train), epoch)
             train_writer.add_scalar("Loss_Rotation", sum_rot_loss /len(dataset_train), epoch)
@@ -742,15 +741,12 @@ def main(_config, _run, seed):
                 dense_depth_img = dense_depth_img.astype(np.uint8)
                 dense_depth_img_color = colormap(dense_depth_img)
                 dense_depth_img_color = transforms.ToTensor()(dense_depth_img_color)                
-<<<<<<< HEAD
-=======
                 
                 lidarOnImage = np.hstack([uv, z])
                 dense_depth_img = dense_map(lidarOnImage.T , real_shape[1], real_shape[0] , _config['dense_resoltuion']) # argument = (lidarOnImage.T , 1241, 376 , 8)
                 dense_depth_img = dense_depth_img.astype(np.uint8)
                 dense_depth_img_color = colormap(dense_depth_img)
                 dense_depth_img_color = transforms.ToTensor()(dense_depth_img_color)  
->>>>>>> 0b04013d43288712cb59d03ea07984d1345bb0fb
                 
                 # PAD ONLY ON RIGHT AND BOTTOM SIDE
                 shape_pad = [0, 0, 0, 0]

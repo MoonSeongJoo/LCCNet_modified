@@ -46,17 +46,10 @@ cotr_args = easydict.EasyDict({
                 "out_dir" : "general_config['out']",
                 # "load_weights" : "None",
 #                 "load_weights_path" : './COTR/out/default/checkpoint.pth.tar' ,
-<<<<<<< HEAD
-                "load_weights_path" : "/home/ubuntu/work/autocalib/considering_project/models/98_checkpoint.pth.tar",
-                # "load_weights_path" : True ,
-                "load_weights_freeze" : False ,
-                "max_corrs" : 100 ,
-=======
                 "load_weights_path" : "/home/ubuntu/work/autocalib/considering_project/models/200_checkpoint.pth.tar",
                 # "load_weights_path" : None,
-                "load_weights_freeze" : True ,
+                "load_weights_freeze" : False ,
                 "max_corrs" : 1000 ,
->>>>>>> 0b04013d43288712cb59d03ea07984d1345bb0fb
                 "dim_feedforward" : 1024 , 
                 "backbone" : "resnet50" ,
                 "hidden_dim" : 256 ,
@@ -157,6 +150,9 @@ class LCCNet(nn.Module):
         input: md --- maximum displacement (for correlation. default: 4), after warpping
         """
         super(LCCNet, self).__init__()
+        
+        self.distanceList = []
+        
         self.num_kp = num_kp
         
         self.mono = MonoDepth() # depth estimation by monodepth2
@@ -174,15 +170,16 @@ class LCCNet(nn.Module):
         
         if cotr_args.load_weights_freeze is True:
             print("COTR pre-trained weights freeze")
-            self.corr.eval()
-            # for param in self.corr.parameters():
-            #     param.requires_grad = False
+            # self.corr.eval()
+            for param in self.corr.parameters():
+                param.requires_grad = False
         
         
         self.leakyRELU = nn.LeakyReLU(0.1)
 
         #self.fc1 = nn.Linear(fc_size * 4, 512)
-        self.fc1 = nn.Linear(self.num_kp * 4 , 256) # select numer of corresepondence matching point * 2 shape[0] # ========= number of kp (self.num_kp) * 4 ===========
+        # self.fc1 = nn.Linear(self.num_kp * 4 , 256) # select numer of corresepondence matching point * 2 shape[0] # ========= number of kp (self.num_kp) * 4 ===========
+        self.fc1 = nn.Linear(self.num_kp , 256) # select numer of corresepondence matching point * 2 shape[0] # ========= number of kp (self.num_kp) * 4 ===========
         #self.fc1_trasl = nn.Linear(512, 256)
         self.fc1_trasl = nn.Linear(256, 256)
         self.fc1_rot = nn.Linear(256, 256)
@@ -342,8 +339,8 @@ class LCCNet(nn.Module):
         
         # print("img_input dtype :" , img_input.dtype)
         # print("query dtype :" , query.dtype)
-        with torch.no_grad():
-            corrs = self.corr(img_input, query)['pred_corrs']
+        # with torch.no_grad():
+        corrs = self.corr(img_input, query)['pred_corrs']
 #         print ('pred_corrs[0] min ' , torch.min(corrs[:,0]))
 #         print ('pred_corrs[0] max ' , torch.max(corrs[:,0]))
 #         print ('pred_corrs[1] min ' , torch.min(corrs[:,1]))
@@ -377,23 +374,37 @@ class LCCNet(nn.Module):
         # print ('------------- display end for analysis-------------')
         # ##### end of display corrs images #############
         
-        img_reverse_input = torch.cat([img_input[..., 640:], img_input[..., :640]], axis=-1)
-        ##cyclic loss pre-processing
-        query_reverse = corrs.clone()
-        query_reverse[..., 0] = query_reverse[..., 0] - 0.5
-        cycle = self.corr(img_reverse_input, query_reverse)['pred_corrs']
-        cycle[..., 0] = cycle[..., 0] - 0.5
-        mask = torch.norm(cycle - query, dim=-1) < 10 / 1280
+        # #### corr cyclic loss comutaion #######3
+        # img_reverse_input = torch.cat([img_input[..., 640:], img_input[..., :640]], axis=-1)
+        # ##cyclic loss pre-processing
+        # query_reverse = corrs.clone()
+        # query_reverse[..., 0] = query_reverse[..., 0] - 0.5
+        # cycle = self.corr(img_reverse_input, query_reverse)['pred_corrs']
+        # cycle[..., 0] = cycle[..., 0] - 0.5
+        # mask = torch.norm(cycle - query, dim=-1) < 10 / 1280
 #         if mask.sum() > 0:
 #             ('enter cyclic loss mask sum')
 #             cycle_loss = torch.nn.functional.mse_loss(cycle[mask], query[mask])        
+        valid = 0.6
+        calib_flow_pred = F.pairwise_distance(query,corrs)
+        calib_flow_gt = F.pairwise_distance(query,corr_target)
+        valid = (valid >= 0.5) & (calib_flow_gt < 0.7)
         
-        pred_corrs = torch.cat((query,corrs),dim=-1)
-        x = self.leakyRELU(pred_corrs)
+        # ###### To do LSTM network ##############  
+        # self.distanceList.append(calib_flow_pred)
+        # if len(self.distanceList) > 5 :
+        #     self.distanceList = self.distanceList[1:6]
+        # #if len(self.distanceList) == 5 : 
+        #     #LSTM layer 5개 짜리 list
+        #     #5개가 다 되기 전에는 LSTM layer 실행 안하게....
+            
+        
+        # pred_corrs = torch.cat((query,corrs),dim=-1)
+        x = self.leakyRELU(calib_flow_pred)
         x = x.view(x.shape[0], -1)
         x = self.dropout(x)
-        x = x.to('cuda')
-        x = x.float()
+        # x = x.to('cuda')
+        # x = x.float()
         x = self.leakyRELU(self.fc1(x))
 
         transl = self.leakyRELU(self.fc1_trasl(x))
@@ -402,7 +413,7 @@ class LCCNet(nn.Module):
         rot = self.fc2_rot(rot)
         rot = F.normalize(rot, dim=1)
 
-        return transl, rot , corrs , cycle , mask
+        return transl, rot , calib_flow_pred , calib_flow_gt , valid
             
 
         

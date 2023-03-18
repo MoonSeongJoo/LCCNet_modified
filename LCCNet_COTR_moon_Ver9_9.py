@@ -35,9 +35,9 @@ import easydict
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '1'
 
 #loading COTR network model
-from COTR.COTR_models.cotr_model_moon_Ver5 import build
+from COTR.COTR_models.cotr_model_moon_Ver9_9 import build
 from COTR.utils import utils, debug_utils
-from COTR.inference.sparse_engine_Ver1 import SparseEngine
+# from COTR.inference.sparse_engine_Ver1 import SparseEngine
 
 #loading Monodepth2 network model
 import monodepth2.networks
@@ -46,20 +46,14 @@ cotr_args = easydict.EasyDict({
                 "out_dir" : "general_config['out']",
                 # "load_weights" : "None",
 #                 "load_weights_path" : './COTR/out/default/checkpoint.pth.tar' ,
-<<<<<<< HEAD
-                "load_weights_path" : "/home/ubuntu/work/autocalib/considering_project/models/98_checkpoint.pth.tar",
-                # "load_weights_path" : True ,
+                # "load_weights_path" : "/root/work/LCCNet_Moon/models/200_checkpoint.pth.tar",
+                "load_weights_path" : None,
                 "load_weights_freeze" : False ,
-                "max_corrs" : 100 ,
-=======
-                "load_weights_path" : "/home/ubuntu/work/autocalib/considering_project/models/200_checkpoint.pth.tar",
-                # "load_weights_path" : None,
-                "load_weights_freeze" : True ,
                 "max_corrs" : 1000 ,
->>>>>>> 0b04013d43288712cb59d03ea07984d1345bb0fb
                 "dim_feedforward" : 1024 , 
                 "backbone" : "resnet50" ,
-                "hidden_dim" : 256 ,
+                # "hidden_dim" : 256 ,   # uv 2ch only transformer embedding dimension
+                "hidden_dim" : 384 ,  #uvz 3ch transformer embedding dimension
                 "dilation" : False ,
                 "dropout" : 0.1 ,
                 "nheads" : 8 ,
@@ -182,7 +176,8 @@ class LCCNet(nn.Module):
         self.leakyRELU = nn.LeakyReLU(0.1)
 
         #self.fc1 = nn.Linear(fc_size * 4, 512)
-        self.fc1 = nn.Linear(self.num_kp * 4 , 256) # select numer of corresepondence matching point * 2 shape[0] # ========= number of kp (self.num_kp) * 4 ===========
+        # self.fc1 = nn.Linear(self.num_kp * 4 , 256) # select numer of corresepondence matching point * 2 shape[0] # ========= number of kp (self.num_kp) * 4 ===========
+        self.fc1 = nn.Linear(self.num_kp * 6 , 256) # select numer of corresepondence matching point * 3 shape[0] # ========= number of kp (self.num_kp) * 6 add uvz 3dim===========
         #self.fc1_trasl = nn.Linear(512, 256)
         self.fc1_trasl = nn.Linear(256, 256)
         self.fc1_rot = nn.Linear(256, 256)
@@ -342,8 +337,8 @@ class LCCNet(nn.Module):
         
         # print("img_input dtype :" , img_input.dtype)
         # print("query dtype :" , query.dtype)
-        with torch.no_grad():
-            corrs = self.corr(img_input, query)['pred_corrs']
+        # with torch.no_grad():
+        corrs = self.corr(img_input, query)['pred_corrs']
 #         print ('pred_corrs[0] min ' , torch.min(corrs[:,0]))
 #         print ('pred_corrs[0] max ' , torch.max(corrs[:,0]))
 #         print ('pred_corrs[1] min ' , torch.min(corrs[:,1]))
