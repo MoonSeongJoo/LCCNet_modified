@@ -342,16 +342,16 @@ class LCCNet(nn.Module):
 #         print ('pred_corrs[1] min ' , torch.min(corrs[:,1]))
 #         print ('pred_corrs[1] max ' , torch.max(corrs[:,1]))
         
-        ##### display corrs images #############
-        corrs_cpu = corrs.cpu().detach().numpy()
-        query_cpu = query.cpu().detach().numpy()
-        corr_target_cpu = corr_target.cpu().detach().numpy()
+        # ##### display corrs images #############
+        # corrs_cpu = corrs.cpu().detach().numpy()
+        # query_cpu = query.cpu().detach().numpy()
+        # corr_target_cpu = corr_target.cpu().detach().numpy()
         
-        pred_corrs = np.concatenate([query_cpu, corrs_cpu], axis=-1)
-        pred_corrs , draw_pred_out = self.draw_corrs(img_cpu, pred_corrs)
+        # pred_corrs = np.concatenate([query_cpu, corrs_cpu], axis=-1)
+        # pred_corrs , draw_pred_out = self.draw_corrs(img_cpu, pred_corrs)
         
-        target_corrs = np.concatenate([query_cpu, corr_target_cpu], axis=-1)
-        target_corrs , draw_target_out = self.draw_corrs(img_cpu, target_corrs)
+        # target_corrs = np.concatenate([query_cpu, corr_target_cpu], axis=-1)
+        # target_corrs , draw_target_out = self.draw_corrs(img_cpu, target_corrs)
 
         # print ('------------- display start for analysis-------------')
         # plt.figure(figsize=(20, 40))
