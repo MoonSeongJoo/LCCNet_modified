@@ -79,13 +79,14 @@ class BackboneBase(nn.Module):
     def forward(self, tensor_list: NestedTensor):
 #         print ('tensor_list_shape' , tensor_list.tensors.shape )
         # assert tensor_list.tensors.shape[-2:] == (256, 1024)
-        assert tensor_list.tensors.shape[-2:] == (192, 1280)
+        # assert tensor_list.tensors.shape[-2:] == (192, 1280)
+        assert tensor_list.tensors.shape[-2:] == (256, 512)
 #         print("tensor_list_left_shape" ,tensor_list.tensors[..., 0:constants.MAX_SIZE].shape)
 #         print("tensor_list_right_shape" ,tensor_list.tensors[..., constants.MAX_SIZE: 2*constants.MAX_SIZE].shape)
         # left = self.body(tensor_list.tensors[..., 0:512])
         # right = self.body(tensor_list.tensors[..., 512: 1024])
-        left = self.body(tensor_list.tensors[..., 0:640])
-        right = self.body(tensor_list.tensors[..., 640: 1280])
+        left = self.body(tensor_list.tensors[..., 0:256])
+        right = self.body(tensor_list.tensors[..., 256: 512])
         xs = {}
         for k in left.keys():
             xs[k] = torch.cat([left[k], right[k]], dim=-1)

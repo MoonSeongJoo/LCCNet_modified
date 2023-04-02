@@ -82,6 +82,7 @@ def get_patch_centered_at(img, pos, scale=1.0, return_content=True, img_shape=No
     '''
     pos - [x, y]
     '''
+    scale=1.0
     if img_shape is None:
         img_shape = img.shape
     h, w, _ = img_shape
@@ -108,7 +109,8 @@ def get_patch_centered_at(img, pos, scale=1.0, return_content=True, img_shape=No
 def cotr_patch_flow_exhaustive(model, patches_a, patches_b):
     def one_pass(model, img_a, img_b):
         img_appended =[]
-        LARGE_GPU = True
+        # LARGE_GPU = True
+        LARGE_GPU = False
         device = next(model.parameters()).device
 #         print ('------- inference_helper.py one_pass input image a.shape ----------' , img_a.shape)
 #         print ('------- inference_helper.py one_pass input image b.shape ----------' , img_b.shape)

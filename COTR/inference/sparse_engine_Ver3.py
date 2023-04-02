@@ -280,7 +280,7 @@ class SparseEngine():
         if len(out) == 1:
             out = out[0]
         
-        print ('------ out shape-----------', out.shape)
+        # print ('------ out shape-----------', out.shape)
 #         print ('------- out value----------' , out)
         #print ('------- out type ----------' , type(out))
         

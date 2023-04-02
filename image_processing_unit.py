@@ -138,12 +138,13 @@ def corr_gen( gt_points_index, points_index, gt_uv, uv , num_kp = 500) :
     uv    = uv[inter_uv_mask] 
     corrs = np.concatenate([gt_uv, uv], axis=1)
     corrs = torch.tensor(corrs)
-
+    
+    ## corrs 384*1280 image(original image shape) normalization
     corrs[:, 0] = (0.5*corrs[:, 0])/1280
     corrs[:, 1] = (0.5*corrs[:, 1])/384
     corrs[:, 2] = (0.5*corrs[:, 2])/1280 + 0.5        
     corrs[:, 3] = (0.5*corrs[:, 3])/384   
-
+    
     if corrs.shape[0] <= num_kp :
         corrs = torch.zeros(num_kp, 4)
         corrs[:, 2] = corrs[:, 2] + 0.5
