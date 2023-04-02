@@ -198,7 +198,7 @@ class CombinedLoss(nn.Module):
             error.clamp(100.)
             point_clouds_loss += error.mean()
         
-        corr_loss = 0.0 
+        corr_loss = 0.
         corr_loss = torch.nn.functional.mse_loss(corr_pred, corr_target)
         
         if mask.sum() > 0:

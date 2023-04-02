@@ -86,7 +86,11 @@ def config():
     checkpoints = './checkpoints/'
     dataset = 'kitti/odom' # 'kitti/raw'
     data_folder = "/home/ubuntu/data/kitti_odometry"
+<<<<<<< HEAD
+    # data_folder = "/mnt/sgvrnas/sjmoon/kitti/kitti_odometry"
+=======
     # data_folder = "/mnt/data/kitti_odometry"
+>>>>>>> 0b04013d43288712cb59d03ea07984d1345bb0fb
     use_reflectance = False
     val_sequence = 7
     epochs = 200
@@ -738,12 +742,15 @@ def main(_config, _run, seed):
                 dense_depth_img = dense_depth_img.astype(np.uint8)
                 dense_depth_img_color = colormap(dense_depth_img)
                 dense_depth_img_color = transforms.ToTensor()(dense_depth_img_color)                
+<<<<<<< HEAD
+=======
                 
                 lidarOnImage = np.hstack([uv, z])
                 dense_depth_img = dense_map(lidarOnImage.T , real_shape[1], real_shape[0] , _config['dense_resoltuion']) # argument = (lidarOnImage.T , 1241, 376 , 8)
                 dense_depth_img = dense_depth_img.astype(np.uint8)
                 dense_depth_img_color = colormap(dense_depth_img)
                 dense_depth_img_color = transforms.ToTensor()(dense_depth_img_color)  
+>>>>>>> 0b04013d43288712cb59d03ea07984d1345bb0fb
                 
                 # PAD ONLY ON RIGHT AND BOTTOM SIDE
                 shape_pad = [0, 0, 0, 0]

@@ -36,8 +36,8 @@ from torchvision.transforms import functional as tvtf
 from sacred import Experiment
 from sacred.utils import apply_backspaces_and_linefeeds
 
-from DatasetLidarCamera_Ver9_6 import DatasetLidarCameraKittiOdometry
-from losses_Ver9_6 import DistancePoints3D, GeometricLoss, L1Loss, ProposedLoss, CombinedLoss
+from DatasetLidarCamera_Ver9_9 import DatasetLidarCameraKittiOdometry
+from losses_Ver9_9 import DistancePoints3D, GeometricLoss, L1Loss, ProposedLoss, CombinedLoss
 
 
 from quaternion_distances import quaternion_distance
@@ -47,9 +47,9 @@ from utils import (mat2xyzrpy, merge_inputs, overlay_imgs, quat2mat,
                    quaternion_from_matrix, rotate_back, rotate_forward,
                    tvector2mat)
 
-from image_processing_unit import lidar_project_depth , corr_gen , dense_map , colormap
-from LCCNet_COTR_moon_Ver9_6 import LCCNet
-from COTR.inference.sparse_engine_Ver3 import SparseEngine
+from image_processing_unit import lidar_project_depth , corr_gen , dense_map , colormap , corr_gen_withZ
+from LCCNet_COTR_moon_Ver9_9 import LCCNet
+# from COTR.inference.sparse_engine_Ver3 import SparseEngine
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -85,8 +85,8 @@ poses_path = "data_odometry_poses"
 def config():
     checkpoints = './checkpoints/'
     dataset = 'kitti/odom' # 'kitti/raw'
-    # data_folder = "/home/ubuntu/data/kitti_odometry"
-    data_folder = "/mnt/data/kitti_odometry"
+    data_folder = "/home/ubuntu/data/kitti_odometry"
+    # data_folder = "/mnt/data/kitti_odometry"
     use_reflectance = False
     val_sequence = 6
     epochs = 200
@@ -94,7 +94,7 @@ def config():
     loss = 'combined'
     max_t = 1.5 # 1.5, 1.0,  0.5,  0.2,  0.1
     max_r = 20.0 # 20.0, 10.0, 5.0,  2.0,  1.0
-    batch_size = 14 # 120
+    batch_size = 10 # 120
     num_worker = 16
     network = 'Res_f1'
     optimizer = 'adamW'
@@ -143,10 +143,15 @@ def train(model, optimizer, rgb_input, dense_depth_input, corrs , target_transl,
 #     plt.imshow(torchvision.utils.make_grid(rgb_input).cpu().numpy())
 #     plt.title("RGB_input", fontsize=22)
 #     plt.axis('off')
-
     
-    queries     = corrs[:, :, :2]
-    corr_target = corrs[:, :, 2:]
+    dense_depth_input =torch.tensor(dense_depth_input,dtype=torch.float32)
+    corrs =torch.tensor(corrs,dtype=torch.float32)
+    target_transl = torch.tensor(target_transl,dtype=torch.float32)
+    target_rot = torch.tensor(target_rot,dtype=torch.float32)
+ 
+    
+    queries     = corrs[:, :, :3]
+    corr_target = corrs[:, :, 3:]
 
     # Run model
     #transl_err, rot_err = model(rgb_img, refl_img)
@@ -183,8 +188,14 @@ def train(model, optimizer, rgb_input, dense_depth_input, corrs , target_transl,
 def val(model, rgb_input, dense_depth_input ,corrs ,target_transl, target_rot, loss_fn, point_clouds, loss):
     model.eval()
 
-    queries     = corrs[:, :, :2]
-    corr_target = corrs[:, :, 2:]
+    dense_depth_input =torch.tensor(dense_depth_input,dtype=torch.float32)
+    corrs =torch.tensor(corrs,dtype=torch.float32)
+    target_transl = torch.tensor(target_transl,dtype=torch.float32)
+    target_rot = torch.tensor(target_rot,dtype=torch.float32)
+ 
+    
+    queries     = corrs[:, :, :3]
+    corr_target = corrs[:, :, 3:]
 
     # Run model
     with torch.no_grad():
@@ -496,7 +507,7 @@ def main(_config, _run, seed):
                 dense_depth_img_color = F.pad(dense_depth_img_color, shape_pad)
                 
                 # corr dataset generation 
-                corrs = corr_gen(gt_points_index, points_index , gt_uv, uv , _config["num_kp"])
+                corrs = corr_gen_withZ(gt_points_index, points_index , gt_uv, uv , gt_z, z, _config["num_kp"])
                 corrs = corrs
                 
                 # batch stack 
@@ -667,9 +678,7 @@ def main(_config, _run, seed):
                 total_train_loss += loss.item() * len(sample['rgb'])
             train_iter += 1
             # total_iter += len(sample['rgb'])
-        
-        scheduler.step()
-        
+
         print("------------------------------------")
         print('epoch %d total training loss = %.3f' % (epoch, total_train_loss / len(dataset_train)))
         print('Total epoch time = %.2f' % (time.time() - epoch_start_time))
@@ -760,7 +769,7 @@ def main(_config, _run, seed):
                 dense_depth_img_color = F.pad(dense_depth_img_color, shape_pad).cuda()
                 
                 # corr dataset generation 
-                corrs = corr_gen(gt_points_index, points_index , gt_uv, uv , _config["num_kp"])
+                corrs = corr_gen_withZ(gt_points_index, points_index , gt_uv, uv ,gt_z, z ,_config["num_kp"])
                 corrs = corrs.cuda()
                 
                 # batch stack 

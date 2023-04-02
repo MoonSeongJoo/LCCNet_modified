@@ -46,9 +46,9 @@ cotr_args = easydict.EasyDict({
                 "out_dir" : "general_config['out']",
                 # "load_weights" : "None",
 #                 "load_weights_path" : './COTR/out/default/checkpoint.pth.tar' ,
-                "load_weights_path" : "/root/work/LCCNet_Moon/models/200_checkpoint.pth.tar",
-                # "load_weights_path" : None,
-                "load_weights_freeze" : True ,
+                # "load_weights_path" : "/root/work/LCCNet_Moon/models/200_checkpoint.pth.tar",
+                "load_weights_path" : None,
+                "load_weights_freeze" : False ,
                 "max_corrs" : 1000 ,
                 "dim_feedforward" : 1024 , 
                 "backbone" : "resnet50" ,
@@ -335,8 +335,8 @@ class LCCNet(nn.Module):
         
         # print("img_input dtype :" , img_input.dtype)
         # print("query dtype :" , query.dtype)
-        with torch.no_grad():
-            corrs = self.corr(img_input, query)['pred_corrs']
+        # with torch.no_grad():
+        corrs = self.corr(img_input, query)['pred_corrs']
 #         print ('pred_corrs[0] min ' , torch.min(corrs[:,0]))
 #         print ('pred_corrs[0] max ' , torch.max(corrs[:,0]))
 #         print ('pred_corrs[1] min ' , torch.min(corrs[:,1]))
