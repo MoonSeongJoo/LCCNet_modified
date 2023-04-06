@@ -47,7 +47,7 @@ from utils import (mat2xyzrpy, merge_inputs, overlay_imgs, quat2mat,
                    quaternion_from_matrix, rotate_back, rotate_forward,
                    tvector2mat)
 
-from image_processing_unit import lidar_project_depth , corr_gen , dense_map , colormap
+from image_processing_unit import lidar_project_depth , corr_gen , corr_gen_withZ , dense_map , colormap
 from LCCNet_COTR_moon_Ver10_0 import LCCNet
 #from COTR.inference.sparse_engine_Ver3 import SparseEngine
 import warnings
@@ -86,7 +86,8 @@ def config():
     checkpoints = './checkpoints/'
     dataset = 'kitti/odom' # 'kitti/raw'
     # data_folder = "/home/ubuntu/data/kitti_odometry"
-    data_folder = "/mnt/sgvrnas/sjmoon/kitti/kitti_odometry"
+    # data_folder = "/mnt/sgvrnas/sjmoon/kitti/kitti_odometry"
+    data_folder = "/mnt/data/kitti_odometry"
     use_reflectance = False
     val_sequence = 7
     epochs = 200
@@ -115,8 +116,8 @@ def config():
     dense_resoltuion = 2
     local_log_frequency = 50 
 
-# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-os.environ["CUDA_VISIBLE_DEVICES"] = '1'
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# os.environ["CUDA_VISIBLE_DEVICES"] = '0'
 
 EPOCH = 1
 def _init_fn(worker_id, seed):
@@ -495,8 +496,10 @@ def main(_config, _run, seed):
                 dense_depth_img_color = F.pad(dense_depth_img_color, shape_pad)
                 
                 # corr dataset generation 
-                corrs = corr_gen(gt_points_index, points_index , gt_uv, uv , _config["num_kp"])
-                corrs = corrs
+                # corrs = corr_gen(gt_points_index, points_index , gt_uv, uv , _config["num_kp"])
+                corrs_with_z = corr_gen_withZ (gt_points_index, points_index , gt_uv, uv , gt_z, z, _config["num_kp"])
+                corrs = np.concatenate([corrs_with_z[:,:2],corrs_with_z[:,3:5]], axis=1)
+                corrs = torch.tensor(corrs)
                 
                 # batch stack 
                 rgb_input.append(rgb)

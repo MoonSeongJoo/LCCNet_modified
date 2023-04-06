@@ -47,7 +47,7 @@ cotr_args = easydict.EasyDict({
                 "out_dir" : "general_config['out']",
                 # "load_weights" : "None",
 #                 "load_weights_path" : './COTR/out/default/checkpoint.pth.tar' ,
-                "load_weights_path" : "/home/seongjoo/work/autocalib1/considering_project/models/200_checkpoint.pth.tar",
+                "load_weights_path" : "/root/work/LCCNet_Moon/models/200_checkpoint.pth.tar",
                 # "load_weights_path" : None,
                 "load_weights_freeze" : True ,
                 "max_corrs" : 1000 ,
@@ -74,23 +74,23 @@ import easydict
 class MonoDepth():
     def __init__(self):
         self.model_name         = "mono_resnet50_640x192"
-        self.encoder_path       = os.path.join("/home/seongjoo/work/autocalib1/considering_project/monodepth2/models", self.model_name, "encoder.pth")
-        self.depth_decoder_path = os.path.join("/home/seongjoo/work/autocalib1/considering_project/monodepth2/models", self.model_name, "depth.pth")
+        self.encoder_path       = os.path.join("/root/work/LCCNet_Moon/monodepth2/models", self.model_name, "encoder.pth")
+        self.depth_decoder_path = os.path.join("/root/work/LCCNet_Moon/monodepth2/models", self.model_name, "depth.pth")
         
-        # device = torch.device("cuda")
+        device = torch.device("cuda")
         self.encoder = monodepth2.networks.ResnetEncoder(50, False)
         self.depth_decoder = monodepth2.networks.DepthDecoder(num_ch_enc=self.encoder.num_ch_enc, scales=range(4))
         
-        # self.loaded_dict_enc = torch.load(self.encoder_path, map_location=device)
-        self.loaded_dict_enc = torch.load(self.encoder_path, map_location='cuda')
+        self.loaded_dict_enc = torch.load(self.encoder_path, map_location=device)
+        # self.loaded_dict_enc = torch.load(self.encoder_path, map_location='cuda')
         self.filtered_dict_enc = {k: v for k, v in self.loaded_dict_enc.items() if k in self.encoder.state_dict()}
         self.encoder.load_state_dict(self.filtered_dict_enc)
         self.encoder.cuda()
         # self.encoder.to(device)
         # print ('encoder device : ' , next(self.encoder.parameters()).device)
 
-        # self.loaded_dict = torch.load(self.depth_decoder_path, map_location=device)
-        self.loaded_dict = torch.load(self.depth_decoder_path, map_location='cuda')
+        self.loaded_dict = torch.load(self.depth_decoder_path, map_location=device)
+        # self.loaded_dict = torch.load(self.depth_decoder_path, map_location='cuda')
         self.depth_decoder.load_state_dict(self.loaded_dict)
         # self.depth_decoder.to(device)
         self.depth_decoder.cuda()
@@ -244,20 +244,49 @@ class LCCNet(nn.Module):
         out = np.array(out) / 255.0
         return utils.np_img_to_torch_img(out) , out 
     
-    def draw_points(self, imgs, queries, col=(255, 0, 0)):
-        out =[]
-        for img, query in zip(imgs, queries):
-            img = np.interp(img, [img.min(), img.max()], [0, 255]).astype(np.uint8)
-            img = Image.fromarray(img)
-            draw = ImageDraw.Draw(img)
+    def draw_points(self, img, query , mode='640*192'):
 
-            # 포인트 그리기
-            query_x = query[0]
-            query_y = query[1]
-            draw.ellipse((query_x-2, query_y-2, query_x+2, query_y+2), fill='red', outline='red')
-            out.append(np.array(img))
-        out = np.array(out) / 255.0
-        return out 
+        img = Image.fromarray(np.interp(img, [img.min(), img.max()], [0, 255]).astype(np.uint8))
+        draw = ImageDraw.Draw(img)
+
+        # 포인트 그리기
+        if mode=='640*192':
+            query *= np.array([640,192])
+        elif mode=='320_*92':
+            query *= np.array([320,192])
+        
+        for (x, y) in query:
+            draw.ellipse((x-1, y-1, x+1, y+1), fill='red', outline='red')
+
+        # 정중앙 위치 계산하기
+        # 이미지 크기 구하기
+        # w, h = img.size
+        # query_x = w // 2
+        # query_y = h // 2
+        
+        # radius = 2
+        # # 포인트 그리기
+        # draw.ellipse((query_x-radius, query_y-radius, query_x+radius, query_y+radius), fill='red', outline='red')
+       
+        return np.array(img)
+    
+    def draw_center_point(self, img):
+        
+        img = Image.fromarray(np.interp(img, [img.min(), img.max()], [0, 255]).astype(np.uint8))
+        draw = ImageDraw.Draw(img)
+
+        # 이미지 크기 구하기
+        w, h = img.size
+
+        # 정중앙 위치 계산하기
+        query_x = w // 2
+        query_y = h // 2
+        radius = 1
+        # 포인트 그리기
+        draw.ellipse((query_x-radius, query_y-radius, query_x+radius, query_y+radius), fill='red', outline='red')
+
+        return np.array(img)
+
     
     # def make_queries(self):
     #     q_list = []
@@ -307,6 +336,7 @@ class LCCNet(nn.Module):
         
         for idx in range(len(rgb_depth_pred)):
             rgb_pred = rgb_depth_pred[idx].squeeze(0)
+            # print ('center of depth value =' , rgb_pred[192//2,640//2] )
             rgb_pred = self.colormap(rgb_pred)
             rgb_pred = torch.from_numpy(rgb_pred)
             # batch stack 
@@ -321,16 +351,21 @@ class LCCNet(nn.Module):
         # plt.imshow(torchvision.utils.make_grid(rgb_input).permute(1,2,0).cpu().numpy())
         # plt.title("RGB_input", fontsize=22)
         # plt.axis('off')
+        # # plt.savefig('RGB_input1.png' ,bbox_inches='tight', pad_inches=0)
+        # # plt.show() 
         
         # plt.subplot(312)
         # plt.imshow(torchvision.utils.make_grid(rgb_pred_input).permute(1,2,0).cpu().numpy() , cmap='magma')
         # plt.title("rgb_depth_pred ", fontsize=22)
         # plt.axis('off')
+        # # plt.savefig('rgb_depth_pred1.png' ,bbox_inches='tight', pad_inches=0)
+        # # plt.show() 
         
         # plt.subplot(313)
         # plt.imshow(torchvision.utils.make_grid(depth_input).permute(1,2,0).cpu().numpy() , cmap='magma')
         # plt.title("dense_depth_input", fontsize=22)
-        # plt.axis('off')        
+        # plt.axis('off')
+        # # plt.show()        
         # ############# end of display input signal ###################
         
         rgb_pred_input = rgb_pred_input.permute(0,2,3,1)
@@ -359,23 +394,48 @@ class LCCNet(nn.Module):
         #     corrs = self.corr(img_input, query)['pred_corrs']
         for batch_idx in range(len(rgb_pred_input)) :
             rgb_pred_input_np = rgb_pred_input[batch_idx].cpu().numpy()
+            depth_input_np = depth_input[batch_idx].cpu().numpy()
             query_np = query[batch_idx].cpu().numpy()
-            draw_points = self.draw_points(rgb_pred_input_np, query_np)
+            corr_target_np = corr_target[batch_idx].cpu().numpy()
+            corr_target_np[:, 0] = corr_target_np[:, 0]  - 0.5 # normalize for width resizing
+            draw_points = self.draw_points(rgb_pred_input_np, query_np , mode='640*192')
+            draw_points1 = self.draw_points(depth_input_np, corr_target_np , mode='640*192')
+            # draw_points2 = self.draw_center_point(rgb_pred_input_np)
+            # draw_points2 = self.draw_center_point(depth_input_np)
            
-            plt.figure(figsize=(20, 40))
+            plt.figure(figsize=(10, 20))
             plt.imshow(draw_points)
             plt.title("draw_query_points", fontsize=22)
             plt.axis('off')
             plt.show() 
             
-            # rgb_pred_input_np = cv2.resize(rgb_pred_input_np, (320,192), interpolation=cv2.INTER_LINEAR)
-            # depth_input_np = depth_input[batch_idx].cpu().numpy()
-            # depth_input_np = cv2.resize(depth_input_np, (320,192), interpolation=cv2.INTER_LINEAR)
-            # query_np = query[batch_idx].cpu().numpy()
-            # query_np[:, 0] = query_np[:, 0]/2 # normalize for width resizing
-            # query_np[:, 1] = query_np[:, 1]/4 # normalize for width resizing
+            plt.figure(figsize=(10, 20))
+            plt.imshow(draw_points1)
+            plt.title("draw_target_points", fontsize=22)
+            plt.axis('off')
+            plt.show() 
             
-            corrs = self.corr_engine.cotr_corr_multiscale_with_cycle_consistency(rgb_pred_input_np, depth_input_np, np.linspace(0.5, 0.0625, 4), 1, max_corrs=self.num_kp, queries_a=query_np)
+            # plt.figure(figsize=(10, 20))
+            # plt.imshow(draw_points2)
+            # plt.title("draw_center_points", fontsize=22)
+            # plt.axis('off')
+            # plt.savefig('output1.png' ,bbox_inches='tight', pad_inches=0)
+            # plt.show() 
+            
+            # rgb_pred_input_np1 = cv2.resize(rgb_pred_input_np, (320,192), interpolation=cv2.INTER_LINEAR)
+            # depth_input_np1 = cv2.resize(depth_input_np1, (320,192), interpolation=cv2.INTER_LINEAR)
+            # query_np[:, 0] = query_np[:, 0]/2 # normalize for width resizing
+            # query_np[:, 1] = query_np[:, 1] # normalize for width resizing
+            
+            # draw_points2 = self.draw_points(rgb_pred_input_np1, query_np, mode='320*192')
+            
+            # # plt.figure(figsize=(20, 40))
+            # plt.imshow(draw_points2)
+            # plt.title("draw_query_points_resizing", fontsize=22)
+            # plt.axis('off')
+            # plt.show() 
+            
+            # corrs = self.corr_engine.cotr_corr_multiscale_with_cycle_consistency(rgb_pred_input_np1, depth_input_np1, np.linspace(0.5, 0.0625, 4), 1, max_corrs=self.num_kp, queries_a=query_np)
 #         print ('pred_corrs[0] min ' , torch.min(corrs[:,0]))
 #         print ('pred_corrs[0] max ' , torch.max(corrs[:,0]))
 #         print ('pred_corrs[1] min ' , torch.min(corrs[:,1]))

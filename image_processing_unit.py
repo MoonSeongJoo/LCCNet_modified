@@ -62,9 +62,26 @@ def knn(x, y ,k):
 #         xx = torch.sum(x**2, dim=1, keepdim=True)
 # #         print (" xx shape = " , x.shape)
 #         pairwise_distance = -xx - inner - xx.transpose(4, 1)
-    pairwise_distance = F.pairwise_distance(x,y)
+    mask_x = (x[: , 2] > 0.4) & (x[: , 2] < 0.9)
+    mask_y = (y[: , 2] > 0.4) & (y[: , 2] < 0.9)
+    x1 = x[mask_x]
+    y1 = y[mask_y]
+    mask_x1= np.in1d(x1,y1)
+    mask_y1= np.in1d(y1,x1)
+    x2 = x1[mask_x1]
+    y2 = y1[mask_y1]
+    # pairwise_distance = F.pairwise_distance(x,y)
+    pairwise_distance = F.pairwise_distance(x2,y2)
+    # pairwise_distance = torch.cdist(x1,y1)
 
     idx = pairwise_distance.topk(k=k, dim=-1)[1]   # (batch_size, num_points, k)
+    # top_indices = torch.topk(pairwise_distance.flatten(), k=k, largest=False)
+    # top_indices = top_indices.indices
+    # indices = np.unravel_index(top_indices, pairwise_distance.shape)
+    # top_indices = np.asarray(top_indices).T
+
+    # top_x = x1[indices[0]]
+    # top_y = y1[indices[1]]
     return idx
 
 def two_images_side_by_side(img_a, img_b):
@@ -171,24 +188,34 @@ def corr_gen_withZ( gt_points_index, points_index, gt_uv, uv , gt_z, z, num_kp =
     uvz=np.concatenate([uv,z],axis=1)
     corrs = np.concatenate([gt_uvz, uvz], axis=1)
     corrs = torch.tensor(corrs)
+    # gt_points = torch.tensor(gt_uvz)
+    # target_points = torch.tensor(uvz)
 
     corrs[:, 0] = (0.5*corrs[:, 0])/1280
     corrs[:, 1] = (0.5*corrs[:, 1])/384
+    corrs[:, 2] = (corrs[:, 2]-torch.min(corrs[:, 2]))/(torch.max(corrs[:, 2]) - torch.min(corrs[:, 2]))
     corrs[:, 3] = (0.5*corrs[:, 3])/1280 + 0.5        
-    corrs[:, 4] = (0.5*corrs[:, 4])/384   
+    corrs[:, 4] = (0.5*corrs[:, 4])/384 
+    corrs[:, 5] = (corrs[:, 5]-torch.min(corrs[:, 5]))/(torch.max(corrs[:, 5]) - torch.min(corrs[:, 5])) 
 
     if corrs.shape[0] <= num_kp :
         corrs = torch.zeros(num_kp, 6)
+        # target_points = torch.zeros(num_kp, 3)
         # corrs[:, 2] = corrs[:, 2] + 0.5 # for only uv matching
         corrs[:, 3] = corrs[:, 3] + 0.5 # for uvz matching
 
     corrs_knn_idx = knn(corrs[:,:3], corrs[:,3:], num_kp) # knn 2d point-cloud trim
-    corrs = corrs[corrs_knn_idx]               
+
+    corrs = corrs[corrs_knn_idx]   
+    # corrs = corrs[z_mask]    
+    # corrs = torch.cat([top_gt_points,top_target_points],dim=1)
 
     assert (0.0 <= corrs[:, 0]).all() and (corrs[:, 0] <= 0.5).all()
     assert (0.0 <= corrs[:, 1]).all() and (corrs[:, 1] <= 1.0).all()
+    assert (0.0 <= corrs[:, 2]).all() and (corrs[:, 2] <= 1.0).all()
     assert (0.5 <= corrs[:, 3]).all() and (corrs[:, 3] <= 1.0).all()
     assert (0.0 <= corrs[:, 4]).all() and (corrs[:, 4] <= 1.0).all()
+    assert (0.0 <= corrs[:, 5]).all() and (corrs[:, 5] <= 1.0).all()
     
     return corrs
 
