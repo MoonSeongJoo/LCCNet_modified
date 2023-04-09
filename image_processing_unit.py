@@ -25,20 +25,20 @@ def lidar_project_depth(pc_rotated, cam_calib, img_shape):
     pcl_uv, pcl_z = get_2D_lidar_projection(pc_rotated.T, cam_intrinsic)
     mask = (pcl_uv[:, 0] > 0) & (pcl_uv[:, 0] < img_shape[1]) & (pcl_uv[:, 1] > 0) & (
             pcl_uv[:, 1] < img_shape[0] ) & (pcl_z > 0)
-    mask1 = (pcl_uv[:, 1] < 188)
+    # mask1 = (pcl_uv[:, 1] < 188)
     pcl_uv_no_mask = pcl_uv
-    pcl_z_no_mask = pcl_z
+    # pcl_z_no_mask = pcl_z
     pcl_uv = pcl_uv[mask]
     pcl_z = pcl_z[mask]
     pcl_uv = pcl_uv.astype(np.uint32)
-    pcl_uv_no_mask  = pcl_uv_no_mask.astype(np.uint32) 
+    # pcl_uv_no_mask  = pcl_uv_no_mask.astype(np.uint32) 
     pcl_z = pcl_z.reshape(-1, 1)
     depth_img = np.zeros((img_shape[0], img_shape[1], 1))
     depth_img[pcl_uv[:, 1], pcl_uv[:, 0]] = pcl_z
     depth_img = torch.from_numpy(depth_img.astype(np.float32))
     pcl_uv = torch.from_numpy(pcl_uv.astype(np.float32))
     pcl_uv_no_mask = torch.from_numpy(pcl_uv_no_mask.astype(np.float32))
-    pcl_z_no_mask = torch.from_numpy(pcl_z_no_mask.astype(np.float32))
+    # pcl_z_no_mask = torch.from_numpy(pcl_z_no_mask.astype(np.float32))
     #depth_img = depth_img.cuda()
     depth_img = depth_img.permute(2, 0, 1)
     points_index = np.arange(pcl_uv_no_mask.shape[0])[mask]
@@ -62,16 +62,58 @@ def knn(x, y ,k):
 #         xx = torch.sum(x**2, dim=1, keepdim=True)
 # #         print (" xx shape = " , x.shape)
 #         pairwise_distance = -xx - inner - xx.transpose(4, 1)
-    mask_x = (x[: , 2] > 0.4) & (x[: , 2] < 0.9)
-    mask_y = (y[: , 2] > 0.4) & (y[: , 2] < 0.9)
-    x1 = x[mask_x]
-    y1 = y[mask_y]
-    mask_x1= np.in1d(x1,y1)
-    mask_y1= np.in1d(y1,x1)
+    # mask_x = (x[: , 2] > 0.5) & (x[: , 2] < 0.8)
+    # mask_y = (y[: , 2] > 0.5) & (y[: , 2] < 0.8)
+    # x1 = x[mask_x]
+    # y1 = y[mask_y]
+    # mask_x1= np.in1d(mask_x,mask_y)
+    # mask_y1= np.in1d(mask_y,mask_x)
+    # x2 = x[mask_x1]
+    # y2 = y[mask_y1]
+    # x2 = torch.from_numpy(x2)  # NumPy 배열을 PyTorch Tensor로 변환
+    # y2 = torch.from_numpy(y2)  # NumPy 배열을 PyTorch Tensor로 변환
+    # pairwise_distance = F.pairwise_distance(x,y)
+    
+    # #### monitoring x/y point #####################
+    # print ("x2 x_point min =" , torch.min(x[:,0]))
+    # print ("x2 x_point max =" , torch.max(x[:,0]))
+    # print ("y2 x_point min =" , torch.min(y[:,0]))
+    # print ("y2 x_point max =" , torch.max(y[:,0]))
+    # print ("x2 y_point min =" , torch.min(x[:,1]))
+    # print ("x2 y_point max =" , torch.max(x[:,1]))
+    # print ("y2 y_point min =" , torch.min(y[:,1]))
+    # print ("y2 y_point max =" , torch.max(y[:,1]))
+    # print ("x2 depth min =" , torch.min(x[:,2]))
+    # print ("x2 depth max =" , torch.max(x[:,2]))
+    # print ("y2 depth min =" , torch.min(y[:,2]))
+    # print ("y2 depth max =" , torch.max(y[:,2]))
+    # ##############################################
+    
+    # 일정 depth range (min_depth, max_depth)
+    min_depth = 0.05
+    max_depth = 0.2
+    
+    # y[:, 2] = 1 - y[:, 2] # 세 번째 열 값 반전
+    # min_depth <= depth <= max_depth 인 point들의 인덱스를 구합니다.
+    depth_mask1 = (x[:, 2] >= min_depth) & (x[:, 2] <= max_depth) # & (x[:,1] >= 0.6 )
+    depth_mask2 = (y[:, 2] >= min_depth) & (y[:, 2] <= max_depth) # & (y[:,1] >= 0.6 )
+    depth_indices1 = np.where(depth_mask1)[0]
+    depth_indices2 = np.where(depth_mask2)[0]
+    
+    x1 = x[depth_indices1]
+    y1 = y[depth_indices2]
+
+    mask_x1= np.in1d(depth_indices1,depth_indices2)
+    mask_y1= np.in1d(depth_indices2,depth_indices1)
+    
     x2 = x1[mask_x1]
     y2 = y1[mask_y1]
-    # pairwise_distance = F.pairwise_distance(x,y)
-    pairwise_distance = F.pairwise_distance(x2,y2)
+    
+    if x2.shape[0] <= k :
+        x2 = torch.zeros(k, 3)
+        y2 = torch.zeros(k, 3)
+            
+    pairwise_distance = F.pairwise_distance(x2, y2)
     # pairwise_distance = torch.cdist(x1,y1)
 
     idx = pairwise_distance.topk(k=k, dim=-1)[1]   # (batch_size, num_points, k)
@@ -80,9 +122,16 @@ def knn(x, y ,k):
     # indices = np.unravel_index(top_indices, pairwise_distance.shape)
     # top_indices = np.asarray(top_indices).T
 
-    # top_x = x1[indices[0]]
-    # top_y = y1[indices[1]]
-    return idx
+    top_x = x2[idx]
+    top_y = y2[idx]
+    # print ("x point of z =" , top_x[3])
+    # print ("y point of z =" , top_y[3])
+    # top_y[:, 2] =  1- top_y[:, 2] # 세 번째 열의 값에서 1을 빼기 
+    # print ("y point of rev z =" , top_y[3])
+    
+    corrs = torch.cat([top_x,top_y] ,dim=1) 
+        
+    return idx , corrs
 
 def two_images_side_by_side(img_a, img_b):
     assert img_a.shape == img_b.shape, f'{img_a.shape} vs {img_b.shape}'
@@ -176,7 +225,7 @@ def corr_gen( gt_points_index, points_index, gt_uv, uv , num_kp = 500) :
     
     return corrs
 
-def corr_gen_withZ( gt_points_index, points_index, gt_uv, uv , gt_z, z, num_kp = 500) :
+def corr_gen_withZ( gt_points_index, points_index, gt_uv, uv , gt_z, z, origin_img_shape, resized_shape, num_kp = 500) :
     
     inter_gt_uv_mask = np.in1d(gt_points_index , points_index)
     inter_uv_mask    = np.in1d(points_index , gt_points_index)
@@ -185,39 +234,81 @@ def corr_gen_withZ( gt_points_index, points_index, gt_uv, uv , gt_z, z, num_kp =
     gt_z = gt_z[inter_gt_uv_mask]
     z    = z[inter_uv_mask] 
     gt_uvz = np.concatenate([gt_uv,gt_z], axis=1)
-    uvz=np.concatenate([uv,z],axis=1)
+    uvz= np.concatenate([uv,z],axis=1)
     corrs = np.concatenate([gt_uvz, uvz], axis=1)
     corrs = torch.tensor(corrs)
     # gt_points = torch.tensor(gt_uvz)
     # target_points = torch.tensor(uvz)
+    # scale_img = np.array (resized_shape) / np.array(origin_img_shape) 
+    
+    # #### monitoring x/y point #####################
+    # print ("origin gt x_point min =" ,     torch.min(corrs[:,0]))
+    # print ("origin gt x_point max =" ,     torch.max(corrs[:,0]))
+    # print ("origin target x_point min =" , torch.min(corrs[:,3]))
+    # print ("origin target x_point max =" , torch.max(corrs[:,3]))
+    # print ("origin gt y_point min =" ,     torch.min(corrs[:,1]))
+    # print ("origin gt y_point max =" ,     torch.max(corrs[:,1]))
+    # print ("origin target y_point min =" , torch.min(corrs[:,1]))
+    # print ("origin target y_point max =" , torch.max(corrs[:,1]))
+    # print ("origin gt depth min =" ,       torch.min(corrs[:,2]))
+    # print ("origin gt depth max =" ,       torch.max(corrs[:,2]))
+    # print ("origin target depth min =" ,   torch.min(corrs[:,2]))
+    # print ("origin target depth max =" ,   torch.max(corrs[:,2]))
+    # ##############################################
+    
+    # corrs[:, 0] = (0.5*corrs[:, 0])/1280
+    corrs[:, 0] = corrs[:, 0]/origin_img_shape[1] 
+    # corrs[:, 1] = (0.5*corrs[:, 1])/384
+    corrs[:, 1] = corrs[:, 1]/origin_img_shape[0] 
+    if corrs[:, 2].numel() > 0:
+        corrs[:, 2] = (corrs[:, 2]-torch.min(corrs[:, 2]))/(torch.max(corrs[:, 2]) - torch.min(corrs[:, 2]))
+    else :
+        corrs[:, 2] = (corrs[:, 2]-0)/(80 - 0)
+    # corrs[:, 3] = (0.5*corrs[:, 3])/1280 + 0.5
+    corrs[:, 3] = corrs[:, 3]/origin_img_shape[1]         
+    # corrs[:, 4] = (0.5*corrs[:, 4])/384
+    corrs[:, 4] = corrs[:, 4]/origin_img_shape[0]
+    if corrs[:, 5].numel() > 0:
+        corrs[:, 5] = (corrs[:, 5]-torch.min(corrs[:, 5]))/(torch.max(corrs[:, 5]) - torch.min(corrs[:, 5])) 
+    else :
+        corrs[:, 5] = (corrs[:, 5]-0)/(80 - 0)
 
-    corrs[:, 0] = (0.5*corrs[:, 0])/1280
-    corrs[:, 1] = (0.5*corrs[:, 1])/384
-    corrs[:, 2] = (corrs[:, 2]-torch.min(corrs[:, 2]))/(torch.max(corrs[:, 2]) - torch.min(corrs[:, 2]))
-    corrs[:, 3] = (0.5*corrs[:, 3])/1280 + 0.5        
-    corrs[:, 4] = (0.5*corrs[:, 4])/384 
-    corrs[:, 5] = (corrs[:, 5]-torch.min(corrs[:, 5]))/(torch.max(corrs[:, 5]) - torch.min(corrs[:, 5])) 
+    # #### monitoring x/y point #####################
+    # print ("normalized gt x_point min =" ,     torch.min(corrs[:,0]))
+    # print ("normalized gt x_point max =" ,     torch.max(corrs[:,0]))
+    # print ("normalized target x_point min =" , torch.min(corrs[:,3]))
+    # print ("normalized target x_point max =" , torch.max(corrs[:,3]))
+    # print ("normalized gt y_point min =" ,     torch.min(corrs[:,1]))
+    # print ("normalized gt y_point max =" ,     torch.max(corrs[:,1]))
+    # print ("normalized target y_point min =" , torch.min(corrs[:,1]))
+    # print ("normalized target y_point max =" , torch.max(corrs[:,1]))
+    # print ("normalized gt depth min =" ,       torch.min(corrs[:,2]))
+    # print ("normalized gt depth max =" ,       torch.max(corrs[:,2]))
+    # print ("normalized target depth min =" ,   torch.min(corrs[:,2]))
+    # print ("normalized target depth max =" ,   torch.max(corrs[:,2]))
+    # ##############################################
 
     if corrs.shape[0] <= num_kp :
         corrs = torch.zeros(num_kp, 6)
         # target_points = torch.zeros(num_kp, 3)
         # corrs[:, 2] = corrs[:, 2] + 0.5 # for only uv matching
-        corrs[:, 3] = corrs[:, 3] + 0.5 # for uvz matching
+        # corrs[:, 3] = corrs[:, 3] + 0.5 # for uvz matching
 
-    corrs_knn_idx = knn(corrs[:,:3], corrs[:,3:], num_kp) # knn 2d point-cloud trim
+    corrs_knn_idx ,corrs_prev = knn(corrs[:,:3], corrs[:,3:], num_kp) # knn 2d point-cloud trim
 
     corrs = corrs[corrs_knn_idx]   
+    corrs1 = corrs_prev
     # corrs = corrs[z_mask]    
     # corrs = torch.cat([top_gt_points,top_target_points],dim=1)
 
-    assert (0.0 <= corrs[:, 0]).all() and (corrs[:, 0] <= 0.5).all()
-    assert (0.0 <= corrs[:, 1]).all() and (corrs[:, 1] <= 1.0).all()
-    assert (0.0 <= corrs[:, 2]).all() and (corrs[:, 2] <= 1.0).all()
-    assert (0.5 <= corrs[:, 3]).all() and (corrs[:, 3] <= 1.0).all()
-    assert (0.0 <= corrs[:, 4]).all() and (corrs[:, 4] <= 1.0).all()
-    assert (0.0 <= corrs[:, 5]).all() and (corrs[:, 5] <= 1.0).all()
+    # assert (0.0 <= corrs[:, 0]).all() and (corrs[:, 0] <= 0.5).all()
+    # assert (0.0 <= corrs[:, 1]).all() and (corrs[:, 1] <= 1.0).all()
+    # assert (0.0 <= corrs[:, 2]).all() and (corrs[:, 2] <= 1.0).all()
+    # assert (0.5 <= corrs[:, 3]).all() and (corrs[:, 3] <= 1.0).all()
+    # assert (0.0 <= corrs[:, 4]).all() and (corrs[:, 4] <= 1.0).all()
+    # assert (0.0 <= corrs[:, 5]).all() and (corrs[:, 5] <= 1.0).all()
     
-    return corrs
+    return corrs1
 
 # for displying correspondence matching 
 def draw_corrs(self, imgs, corrs, col=(255, 0, 0)):

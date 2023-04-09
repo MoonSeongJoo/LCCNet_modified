@@ -85,9 +85,9 @@ poses_path = "data_odometry_poses"
 def config():
     checkpoints = './checkpoints/'
     dataset = 'kitti/odom' # 'kitti/raw'
-    # data_folder = "/home/ubuntu/data/kitti_odometry"
-    # data_folder = "/mnt/sgvrnas/sjmoon/kitti/kitti_odometry"
-    data_folder = "/mnt/data/kitti_odometry"
+    data_folder = "/home/ubuntu/data/kitti_odometry"
+    # data_folder = "/mnt/sgvrnas/sjmoon/kitti/kitti_odometry" 
+    # data_folder = "/mnt/data/kitti_odometry"
     use_reflectance = False
     val_sequence = 7
     epochs = 200
@@ -95,7 +95,7 @@ def config():
     loss = 'combined'
     max_t = 1.5 # 1.5, 1.0,  0.5,  0.2,  0.1
     max_r = 20.0 # 20.0, 10.0, 5.0,  2.0,  1.0
-    batch_size = 1 # 120
+    batch_size = 32 # 120
     num_worker = 16
     network = 'Res_f1'
     optimizer = 'adam'
@@ -116,8 +116,8 @@ def config():
     dense_resoltuion = 2
     local_log_frequency = 50 
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-# os.environ["CUDA_VISIBLE_DEVICES"] = '0'
+# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+os.environ["CUDA_VISIBLE_DEVICES"] = '0'
 
 EPOCH = 1
 def _init_fn(worker_id, seed):
@@ -148,6 +148,9 @@ def train(model, optimizer, rgb_input, dense_depth_input, corrs , target_transl,
     
     queries     = corrs[:, :, :2]
     corr_target = corrs[:, :, 2:]
+    
+    queries     = queries.cuda().type(torch.float32)
+    corr_target = corr_target.cuda().type(torch.float32)
 
     # Run model
     #transl_err, rot_err = model(rgb_img, refl_img)
@@ -420,6 +423,7 @@ def main(_config, _run, seed):
         total_val_loss = 0.
         total_val_t = 0.
         total_val_r = 0.
+        rgb_resize_shape = [192,640,3]
         
         if _config['optimizer'] != 'adam':
             _run.log_scalar("LR", _config['BASE_LEARNING_RATE'] *
@@ -494,10 +498,10 @@ def main(_config, _run, seed):
                 # depth_img = F.pad(depth_img, shape_pad)
                 depth_gt = F.pad(depth_gt, shape_pad)
                 dense_depth_img_color = F.pad(dense_depth_img_color, shape_pad)
-                
+            
                 # corr dataset generation 
                 # corrs = corr_gen(gt_points_index, points_index , gt_uv, uv , _config["num_kp"])
-                corrs_with_z = corr_gen_withZ (gt_points_index, points_index , gt_uv, uv , gt_z, z, _config["num_kp"])
+                corrs_with_z = corr_gen_withZ (gt_points_index, points_index , gt_uv, uv , gt_z, z, real_shape, rgb_resize_shape, _config["num_kp"] )
                 corrs = np.concatenate([corrs_with_z[:,:2],corrs_with_z[:,3:5]], axis=1)
                 corrs = torch.tensor(corrs)
                 

@@ -38,7 +38,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '1'
 #loading COTR network model
 from COTR.COTR_models.cotr_model_moon_Ver5 import build
 from COTR.utils import utils, debug_utils
-from COTR.inference.sparse_engine_Ver3 import SparseEngine
+# from COTR.inference.sparse_engine_Ver3 import SparseEngine
 
 #loading Monodepth2 network model
 import monodepth2.networks
@@ -47,9 +47,9 @@ cotr_args = easydict.EasyDict({
                 "out_dir" : "general_config['out']",
                 # "load_weights" : "None",
 #                 "load_weights_path" : './COTR/out/default/checkpoint.pth.tar' ,
-                "load_weights_path" : "/root/work/LCCNet_Moon/models/200_checkpoint.pth.tar",
+                "load_weights_path" : "/home/ubuntu/work/autocalib/considering_project/models/200_checkpoint.pth.tar",
                 # "load_weights_path" : None,
-                "load_weights_freeze" : True ,
+                "load_weights_freeze" : False ,
                 "max_corrs" : 1000 ,
                 "dim_feedforward" : 1024 , 
                 "backbone" : "resnet50" ,
@@ -74,8 +74,8 @@ import easydict
 class MonoDepth():
     def __init__(self):
         self.model_name         = "mono_resnet50_640x192"
-        self.encoder_path       = os.path.join("/root/work/LCCNet_Moon/monodepth2/models", self.model_name, "encoder.pth")
-        self.depth_decoder_path = os.path.join("/root/work/LCCNet_Moon/monodepth2/models", self.model_name, "depth.pth")
+        self.encoder_path       = os.path.join("/home/ubuntu/work/autocalib/considering_project/monodepth2/models", self.model_name, "encoder.pth")
+        self.depth_decoder_path = os.path.join("/home/ubuntu/work/autocalib/considering_project/monodepth2/models", self.model_name, "depth.pth")
         
         device = torch.device("cuda")
         self.encoder = monodepth2.networks.ResnetEncoder(50, False)
@@ -159,7 +159,6 @@ class LCCNet(nn.Module):
         
         self.corr = build(cotr_args)
         
-        
         # TODO : load COTR pre-trained model    
         if cotr_args.load_weights_path is not None:
             print(f"Loading weights from {cotr_args.load_weights_path}")
@@ -173,7 +172,7 @@ class LCCNet(nn.Module):
             # for param in self.corr.parameters():
             #     param.requires_grad = False
         
-        self.corr_engine = SparseEngine(corr_model, 32, mode='tile')
+        # self.corr_engine = SparseEngine(corr_model, 32, mode='tile')
         
         self.leakyRELU = nn.LeakyReLU(0.1)
 
@@ -383,37 +382,42 @@ class LCCNet(nn.Module):
         sbs_img = tvtf.normalize(sbs_img, (0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
         
         img_input =  sbs_img.cuda().type(torch.float32)
-        rgb_pred_input = rgb_pred_input.cuda()
-        query     =  query_input
-        corr_target_cpu =  corr_target
-        img_cpu   =  img_input.cpu()
+        # rgb_pred_input = rgb_pred_input.cuda()
+        query_input[:,:,0] = query_input[:,:,0]/2    # recaling points for sbs image resizing
+        query_input[:,:,1] = query_input[:,:,1]/2 
+        corr_target[:,:,0] = corr_target[:,:,0]/2 + 0.5 # recaling points for sbs image resizing
+        corr_target[:,:,1] = corr_target[:,:,1]/2 
+        # query_input =  query_input.cuda().type(torch.float32)
+        # corr_target =  corr_target.cuda().type(torch.float32)
         
         # print("img_input dtype :" , img_input.dtype)
         # print("query dtype :" , query.dtype)
-        # with torch.no_grad():
-        #     corrs = self.corr(img_input, query)['pred_corrs']
-        for batch_idx in range(len(rgb_pred_input)) :
-            rgb_pred_input_np = rgb_pred_input[batch_idx].cpu().numpy()
-            depth_input_np = depth_input[batch_idx].cpu().numpy()
-            query_np = query[batch_idx].cpu().numpy()
-            corr_target_np = corr_target[batch_idx].cpu().numpy()
-            corr_target_np[:, 0] = corr_target_np[:, 0]  - 0.5 # normalize for width resizing
-            draw_points = self.draw_points(rgb_pred_input_np, query_np , mode='640*192')
-            draw_points1 = self.draw_points(depth_input_np, corr_target_np , mode='640*192')
-            # draw_points2 = self.draw_center_point(rgb_pred_input_np)
-            # draw_points2 = self.draw_center_point(depth_input_np)
+        with torch.no_grad():
+            corrs_pred = self.corr(img_input, query_input)['pred_corrs']
+        
+        ############ display each image draw points ###############
+        # for batch_idx in range(len(rgb_pred_input)) :
+        #     rgb_pred_input_np = rgb_pred_input[batch_idx].cpu().numpy()
+        #     depth_input_np = depth_input[batch_idx].cpu().numpy()
+        #     query_np = query[batch_idx].cpu().numpy()
+        #     corr_target_np = corr_target[batch_idx].cpu().numpy()
+        #     # corr_target_np[:, 0] = corr_target_np[:, 0] - 0.5 # normalize for width resizing
+        #     draw_points = self.draw_points(rgb_pred_input_np, query_np , mode='640*192')
+        #     draw_points1 = self.draw_points(depth_input_np, corr_target_np , mode='640*192')
+        #     # draw_points2 = self.draw_center_point(rgb_pred_input_np)
+        #     # draw_points2 = self.draw_center_point(depth_input_np)
            
-            plt.figure(figsize=(10, 20))
-            plt.imshow(draw_points)
-            plt.title("draw_query_points", fontsize=22)
-            plt.axis('off')
-            plt.show() 
+        #     plt.figure(figsize=(10, 20))
+        #     plt.imshow(draw_points)
+        #     plt.title("draw_query_points", fontsize=22)
+        #     plt.axis('off')
+        #     plt.show() 
             
-            plt.figure(figsize=(10, 20))
-            plt.imshow(draw_points1)
-            plt.title("draw_target_points", fontsize=22)
-            plt.axis('off')
-            plt.show() 
+        #     plt.figure(figsize=(10, 20))
+        #     plt.imshow(draw_points1)
+        #     plt.title("draw_target_points", fontsize=22)
+        #     plt.axis('off')
+        #     plt.show() 
             
             # plt.figure(figsize=(10, 20))
             # plt.imshow(draw_points2)
@@ -436,14 +440,18 @@ class LCCNet(nn.Module):
             # plt.show() 
             
             # corrs = self.corr_engine.cotr_corr_multiscale_with_cycle_consistency(rgb_pred_input_np1, depth_input_np1, np.linspace(0.5, 0.0625, 4), 1, max_corrs=self.num_kp, queries_a=query_np)
+            ############# end of display ################################
+
 #         print ('pred_corrs[0] min ' , torch.min(corrs[:,0]))
 #         print ('pred_corrs[0] max ' , torch.max(corrs[:,0]))
 #         print ('pred_corrs[1] min ' , torch.min(corrs[:,1]))
 #         print ('pred_corrs[1] max ' , torch.max(corrs[:,1]))
         
         # ##### display corrs images #############
-        # corrs_cpu = corrs.cpu().detach().numpy()
-        # query_cpu = query.cpu().detach().numpy()
+        # corr_target_cpu =  corr_target
+        # img_cpu   =  img_input.cpu()
+        # corrs_cpu = corrs_pred.cpu().detach().numpy()
+        # query_cpu = query_input.cpu().detach().numpy()
         # corr_target_cpu = corr_target.cpu().detach().numpy()
         
         # pred_corrs = np.concatenate([query_cpu, corrs_cpu], axis=-1)
@@ -471,17 +479,17 @@ class LCCNet(nn.Module):
         
         img_reverse_input = torch.cat([img_input[..., 640:], img_input[..., :640]], axis=-1)
         ##cyclic loss pre-processing
-        query_reverse = corrs.clone()
+        query_reverse = corrs_pred.clone()
         query_reverse[..., 0] = query_reverse[..., 0] - 0.5
         cycle = self.corr(img_reverse_input, query_reverse)['pred_corrs']
         cycle[..., 0] = cycle[..., 0] - 0.5
-        mask = torch.norm(cycle - query, dim=-1) < 10 / 1280
+        mask = torch.norm(cycle - query_input, dim=-1) < 10 / 1280
 #         if mask.sum() > 0:
 #             ('enter cyclic loss mask sum')
 #             cycle_loss = torch.nn.functional.mse_loss(cycle[mask], query[mask])        
         
-        pred_corrs = torch.cat((query,corrs),dim=-1)
-        x = self.leakyRELU(pred_corrs)
+        concat_pred_corrs = torch.cat((query_input,corrs_pred),dim=-1)
+        x = self.leakyRELU(concat_pred_corrs)
         x = x.view(x.shape[0], -1)
         x = self.dropout(x)
         x = x.to('cuda')
@@ -494,7 +502,7 @@ class LCCNet(nn.Module):
         rot = self.fc2_rot(rot)
         rot = F.normalize(rot, dim=1)
 
-        return transl, rot , corrs , cycle , mask
+        return transl, rot , corrs_pred , cycle , mask
             
 
         
