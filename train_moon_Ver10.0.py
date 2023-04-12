@@ -85,8 +85,8 @@ poses_path = "data_odometry_poses"
 def config():
     checkpoints = './checkpoints/'
     dataset = 'kitti/odom' # 'kitti/raw'
-    data_folder = "/home/ubuntu/data/kitti_odometry"
-    # data_folder = "/mnt/sgvrnas/sjmoon/kitti/kitti_odometry" 
+    # data_folder = "/home/ubuntu/data/kitti_odometry"
+    data_folder = "/mnt/sgvrnas/sjmoon/kitti/kitti_odometry" 
     # data_folder = "/mnt/data/kitti_odometry"
     use_reflectance = False
     val_sequence = 7
@@ -95,13 +95,13 @@ def config():
     loss = 'combined'
     max_t = 1.5 # 1.5, 1.0,  0.5,  0.2,  0.1
     max_r = 20.0 # 20.0, 10.0, 5.0,  2.0,  1.0
-    batch_size = 32 # 120
-    num_worker = 16
+    batch_size = 16 # 120
+    num_worker = 10
     network = 'Res_f1'
     optimizer = 'adam'
     resume = True
-    # weights = '/root/work/LCCNet_Moon/checkpoints/kitti/odom/val_seq_06/models/checkpoint_r20.00_t1.50_e9_0.002.tar'
-    weights = None
+    weights = '/home/seongjoo/work/autocalib1/considering_project/checkpoints/kitti/odom/val_seq_07/models/checkpoint_r20.00_t1.50_e6_2.154.tar'
+    # weights = None
     rescale_rot = 1.0  #LCCNet initail value = 1.0
     rescale_transl = 2.0  #LCCNet initatil value = 2.0
     precision = "O0"
@@ -111,13 +111,13 @@ def config():
     weight_point_cloud = 0.1 # 이값은 무시해도 됨 loss function에서 직접 관장 원래 LCCNet initail = 0.5
     log_frequency = 1000
     print_frequency = 50
-    starting_epoch = 1
+    starting_epoch = 7
     num_kp = 100
     dense_resoltuion = 2
     local_log_frequency = 50 
 
 # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-os.environ["CUDA_VISIBLE_DEVICES"] = '0'
+os.environ["CUDA_VISIBLE_DEVICES"] = '1'
 
 EPOCH = 1
 def _init_fn(worker_id, seed):
@@ -192,6 +192,9 @@ def val(model, rgb_input, dense_depth_input ,corrs ,target_transl, target_rot, l
     queries     = corrs[:, :, :2]
     corr_target = corrs[:, :, 2:]
 
+    queries     = queries.cuda().type(torch.float32)
+    corr_target = corr_target.cuda().type(torch.float32)
+    
     # Run model
     with torch.no_grad():
         #transl_err, rot_err = model(rgb_img, refl_img)
@@ -764,8 +767,11 @@ def main(_config, _run, seed):
                 dense_depth_img_color = F.pad(dense_depth_img_color, shape_pad).cuda()
                 
                 # corr dataset generation 
-                corrs = corr_gen(gt_points_index, points_index , gt_uv, uv , _config["num_kp"])
-                corrs = corrs.cuda()
+                # corrs = corr_gen(gt_points_index, points_index , gt_uv, uv , _config["num_kp"])
+                # corrs = corrs.cuda()
+                corrs_with_z = corr_gen_withZ (gt_points_index, points_index , gt_uv, uv , gt_z, z, real_shape, rgb_resize_shape, _config["num_kp"] )
+                corrs = np.concatenate([corrs_with_z[:,:2],corrs_with_z[:,3:5]], axis=1)
+                corrs = torch.tensor(corrs)
                 
                 # batch stack 
                 rgb_input.append(rgb)
