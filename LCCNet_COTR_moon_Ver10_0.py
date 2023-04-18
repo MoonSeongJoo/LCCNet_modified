@@ -47,7 +47,7 @@ cotr_args = easydict.EasyDict({
                 "out_dir" : "general_config['out']",
                 # "load_weights" : "None",
 #                 "load_weights_path" : './COTR/out/default/checkpoint.pth.tar' ,
-                "load_weights_path" : "/home/seongjoo/work/autocalib1/considering_project/models/200_checkpoint.pth.tar",
+                "load_weights_path" : "/home/ubuntu/work/autocalib/considering_project/models/200_checkpoint.pth.tar",
                 # "load_weights_path" : None,
                 "load_weights_freeze" : False ,
                 "max_corrs" : 1000 ,
@@ -74,8 +74,8 @@ import easydict
 class MonoDepth():
     def __init__(self):
         self.model_name         = "mono_resnet50_640x192"
-        self.encoder_path       = os.path.join("/home/seongjoo/work/autocalib1/considering_project/monodepth2/models", self.model_name, "encoder.pth")
-        self.depth_decoder_path = os.path.join("/home/seongjoo/work/autocalib1/considering_project/monodepth2/models", self.model_name, "depth.pth")
+        self.encoder_path       = os.path.join("/home/ubuntu/work/autocalib/considering_project/monodepth2/models", self.model_name, "encoder.pth")
+        self.depth_decoder_path = os.path.join("/home/ubuntu/work/autocalib/considering_project/monodepth2/models", self.model_name, "depth.pth")
         
         device = torch.device("cuda")
         self.encoder = monodepth2.networks.ResnetEncoder(50, False)

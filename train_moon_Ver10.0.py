@@ -85,22 +85,22 @@ poses_path = "data_odometry_poses"
 def config():
     checkpoints = './checkpoints/'
     dataset = 'kitti/odom' # 'kitti/raw'
-    # data_folder = "/home/ubuntu/data/kitti_odometry"
-    data_folder = "/mnt/sgvrnas/sjmoon/kitti/kitti_odometry" 
+    data_folder = "/home/ubuntu/data/kitti_odometry"
+    # data_folder = "/mnt/sgvrnas/sjmoon/kitti/kitti_odometry" 
     # data_folder = "/mnt/data/kitti_odometry"
     use_reflectance = False
     val_sequence = 7
     epochs = 200
-    BASE_LEARNING_RATE = 1e-4 # 1e-4
+    BASE_LEARNING_RATE = 1e-3 # 1e-4
     loss = 'combined'
     max_t = 1.5 # 1.5, 1.0,  0.5,  0.2,  0.1
     max_r = 20.0 # 20.0, 10.0, 5.0,  2.0,  1.0
     batch_size = 16 # 120
-    num_worker = 10
+    num_worker = 16
     network = 'Res_f1'
     optimizer = 'adam'
     resume = True
-    weights = '/home/seongjoo/work/autocalib1/considering_project/checkpoints/kitti/odom/val_seq_07/models/checkpoint_r20.00_t1.50_e6_2.154.tar'
+    weights = '/home/ubuntu/work/autocalib/considering_project//checkpoints/kitti/odom/val_seq_07/models/checkpoint_r20.00_t1.50_e19_1.885.tar'
     # weights = None
     rescale_rot = 1.0  #LCCNet initail value = 1.0
     rescale_transl = 2.0  #LCCNet initatil value = 2.0
@@ -111,13 +111,13 @@ def config():
     weight_point_cloud = 0.1 # 이값은 무시해도 됨 loss function에서 직접 관장 원래 LCCNet initail = 0.5
     log_frequency = 1000
     print_frequency = 50
-    starting_epoch = 7
+    starting_epoch = 20
     num_kp = 100
     dense_resoltuion = 2
     local_log_frequency = 50 
 
 # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-os.environ["CUDA_VISIBLE_DEVICES"] = '1'
+os.environ["CUDA_VISIBLE_DEVICES"] = '0'
 
 EPOCH = 1
 def _init_fn(worker_id, seed):
@@ -383,8 +383,9 @@ def main(_config, _run, seed):
     if _config['optimizer'] == 'adam':
         optimizer = optim.Adam(parameters, lr=_config['BASE_LEARNING_RATE'], weight_decay=5e-6)
         # Probably this scheduler is not used
-        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[20, 50, 70], gamma=0.5)
+        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[200], gamma=0.5)
 #         scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[20, 50, 70], gamma=0.3)
+        # scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[20, 50, 70], gamma=0.5)
     else:
         optimizer = optim.SGD(parameters, lr=_config['BASE_LEARNING_RATE'], momentum=0.9,
                               weight_decay=5e-6, nesterov=True)
@@ -549,7 +550,7 @@ def main(_config, _run, seed):
         
             if _config['loss'] == 'points_distance' or _config['loss'] == 'combined':
                 local_loss += loss['total_loss'].item()
-                # local_corr_loss += loss['corr_loss'].item()
+                local_corr_loss += loss['corr_loss'].item()
                 local_pcl_loss += loss['point_clouds_loss'].item()
                 local_rot_loss += loss['rot_loss'].item()
                 local_trans_loss += loss['transl_loss'].item()
@@ -558,7 +559,7 @@ def main(_config, _run, seed):
                 local_loss += loss.item()
             
             train_local_loss = local_loss/50
-            # train_corr_loss = local_corr_loss/50
+            train_corr_loss = local_corr_loss/50
             train_pcl_loss = local_pcl_loss/50
             train_rot_loss = local_rot_loss/50
             train_trans_loss =local_trans_loss/50
@@ -623,7 +624,7 @@ def main(_config, _run, seed):
             if batch_idx % 50 == 0 and batch_idx != 0:
 
                 print(f'Iter {batch_idx}/{len(TrainImgLoader)} training loss = {train_local_loss:.6f}, '
-                    #   f'loss of corr = {train_corr_loss:.6f} ,'
+                      f'loss of corr = {train_corr_loss:.6f} ,'
                       f'loss of pcl = {train_pcl_loss:.6f} ,'
                       f'loss of rot = {train_rot_loss:.6f} ,'
                       f'loss of trans = {train_trans_loss:.6f} ,'
@@ -634,7 +635,7 @@ def main(_config, _run, seed):
                 time_for_50ep = time.time()
                 _run.log_scalar("Loss", local_loss/50, train_iter)
                 local_loss = 0.
-                # local_corr_loss =  0.
+                local_corr_loss =  0.
                 local_pcl_loss = 0.
                 local_rot_loss = 0.
                 local_trans_loss = 0.
@@ -668,7 +669,7 @@ def main(_config, _run, seed):
             
             if _config['loss'] == 'points_distance' or _config['loss'] == 'combined':
                 total_train_loss += loss['total_loss'].item() * len(sample['rgb'])
-                # sum_corr_loss += loss['corr_loss'].item() * len(sample['rgb'])
+                sum_corr_loss += loss['corr_loss'].item() * len(sample['rgb'])
                 sum_point_loss += loss['point_clouds_loss'].item() * len(sample['rgb'])
                 sum_trans_loss += loss['transl_loss'].item() * len(sample['rgb'])
                 sum_rot_loss += loss['rot_loss'] * len(sample['rgb'])
@@ -685,7 +686,7 @@ def main(_config, _run, seed):
         
         if _config['loss'] == 'combined':
             train_writer.add_scalar("Loss_Total", total_train_loss / len(dataset_train), epoch)
-            # train_writer.add_scalar("correspondence_matching", sum_corr_loss / len(dataset_train) , epoch)
+            train_writer.add_scalar("correspondence_matching", sum_corr_loss / len(dataset_train) , epoch)
             train_writer.add_scalar("Loss_Point_clouds", sum_point_loss / len(dataset_train), epoch)
             train_writer.add_scalar("Loss_Translation", sum_trans_loss /len(dataset_train), epoch)
             train_writer.add_scalar("Loss_Rotation", sum_rot_loss /len(dataset_train), epoch)
