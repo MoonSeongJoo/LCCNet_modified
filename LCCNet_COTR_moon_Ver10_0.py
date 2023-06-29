@@ -47,8 +47,8 @@ cotr_args = easydict.EasyDict({
                 "out_dir" : "general_config['out']",
                 # "load_weights" : "None",
 #                 "load_weights_path" : './COTR/out/default/checkpoint.pth.tar' ,
-                "load_weights_path" : "./models/200_checkpoint.pth.tar",
-                # "load_weights_path" : None,
+                # "load_weights_path" : "./models/200_checkpoint.pth.tar",
+                "load_weights_path" : None,
                 "load_weights_freeze" : False ,
                 "max_corrs" : 1000 ,
                 "dim_feedforward" : 1024 , 
@@ -173,12 +173,11 @@ class LCCNet(nn.Module):
             #     param.requires_grad = False
         
         # self.corr_engine = SparseEngine(corr_model, 32, mode='tile')
-        
-        self.leakyRELU = nn.LeakyReLU(0.1)
-
         #self.fc1 = nn.Linear(fc_size * 4, 512)
-        self.fc1 = nn.Linear(self.num_kp * 4 , 256) # select numer of corresepondence matching point * 2 shape[0] # ========= number of kp (self.num_kp) * 4 ===========
         #self.fc1_trasl = nn.Linear(512, 256)
+        self.leakyRELU = nn.LeakyReLU(0.1)
+        self.fc1 = nn.Linear(self.num_kp * 4 , 256) # select numer of corresepondence matching point * 2 shape[0] # ========= number of kp (self.num_kp) * 4 ===========
+
         self.fc1_trasl = nn.Linear(256, 256)
         self.fc1_rot = nn.Linear(256, 256)
 
