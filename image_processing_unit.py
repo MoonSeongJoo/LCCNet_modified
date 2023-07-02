@@ -19,31 +19,36 @@ def get_2D_lidar_projection(pcl, cam_intrinsic):
     return pcl_uv, pcl_z
 
 def lidar_project_depth(pc_rotated, cam_calib, img_shape):
-    pc_rotated = pc_rotated[:3, :].detach().cpu().numpy()
-    cam_intrinsic = cam_calib.numpy()
-    # cam_intrinsic = cam_calib
-    pcl_uv, pcl_z = get_2D_lidar_projection(pc_rotated.T, cam_intrinsic)
+    # pc_rotated = pc_rotated[:3, :].detach().cpu().numpy()
+    # cam_intrinsic = cam_calib.numpy()
+    # pcl_uv, pcl_z = get_2D_lidar_projection(pc_rotated.T, cam_intrinsic)
+    pc_rotated = pc_rotated[:3, :].detach()
+    cam_intrinsic = torch.tensor(cam_calib, dtype=torch.float32).cuda()
+    pcl_uv, pcl_z = get_2D_lidar_projection(pc_rotated.t(), cam_intrinsic)
+    
     mask = (pcl_uv[:, 0] > 0) & (pcl_uv[:, 0] < img_shape[1]) & (pcl_uv[:, 1] > 0) & (
             pcl_uv[:, 1] < img_shape[0] ) & (pcl_z > 0)
     # mask1 = (pcl_uv[:, 1] < 188)
+
     pcl_uv_no_mask = pcl_uv
     # pcl_z_no_mask = pcl_z
     pcl_uv = pcl_uv[mask]
     pcl_z = pcl_z[mask]
-    pcl_uv = pcl_uv.astype(np.uint32)
+    pcl_uv = torch.tensor(pcl_uv, dtype=torch.int64)
+    # pcl_uv = pcl_uv.astype(np.uint32)
     # pcl_uv_no_mask  = pcl_uv_no_mask.astype(np.uint32) 
-    pcl_z = pcl_z.reshape(-1, 1)
-    depth_img = np.zeros((img_shape[0], img_shape[1], 1))
-    depth_img[pcl_uv[:, 1], pcl_uv[:, 0]] = pcl_z
-    depth_img = torch.from_numpy(depth_img.astype(np.float32))
-    pcl_uv = torch.from_numpy(pcl_uv.astype(np.float32))
-    pcl_uv_no_mask = torch.from_numpy(pcl_uv_no_mask.astype(np.float32))
-    # pcl_z_no_mask = torch.from_numpy(pcl_z_no_mask.astype(np.float32))
-    #depth_img = depth_img.cuda()
-    depth_img = depth_img.permute(2, 0, 1)
-    points_index = np.arange(pcl_uv_no_mask.shape[0])[mask]
-    # points_index1 = np.arange(pcl_uv_no_mask.shape[0])[mask1]
     
+    pcl_z = pcl_z.reshape(-1, 1)
+
+    depth_img = np.zeros((img_shape[0], img_shape[1], 1))
+    depth_img = torch.from_numpy(depth_img.astype(np.float32)).cuda()
+    depth_img[pcl_uv[:, 1], pcl_uv[:, 0]] = pcl_z  
+    depth_img = depth_img.permute(2, 0, 1)
+    points_index = torch.arange(pcl_uv_no_mask.shape[0], device=pcl_uv_no_mask.device)[mask]
+
+    # points_index = np.arange(pcl_uv_no_mask.shape[0])[mask]
+    # points_index1 = np.arange(pcl_uv_no_mask.shape[0])[mask1]
+
     return depth_img, pcl_uv , pcl_z , points_index 
     
 def trim_corrs(in_corrs):
@@ -97,21 +102,27 @@ def knn(x, y ,k):
     # min_depth <= depth <= max_depth 인 point들의 인덱스를 구합니다.
     depth_mask1 = (x[:, 2] >= min_depth) & (x[:, 2] <= max_depth) # & (x[:,1] >= 0.6 )
     depth_mask2 = (y[:, 2] >= min_depth) & (y[:, 2] <= max_depth) # & (y[:,1] >= 0.6 )
-    depth_indices1 = np.where(depth_mask1)[0]
-    depth_indices2 = np.where(depth_mask2)[0]
-    
+    # depth_indices1 = np.where(depth_mask1)[0]
+    # depth_indices2 = np.where(depth_mask2)[0]
+    depth_indices1 = torch.nonzero(depth_mask1).squeeze()
+    depth_indices2 = torch.nonzero(depth_mask2).squeeze()
+
     x1 = x[depth_indices1]
     y1 = y[depth_indices2]
 
-    mask_x1= np.in1d(depth_indices1,depth_indices2)
-    mask_y1= np.in1d(depth_indices2,depth_indices1)
-    
+    # mask_x1= np.in1d(depth_indices1,depth_indices2)
+    # mask_y1= np.in1d(depth_indices2,depth_indices1)
+    # mask_x1 = (depth_indices1[..., None] == depth_indices2).any(dim=1)
+    # mask_y1 = (depth_indices2[..., None] == depth_indices1).any(dim=1)
+    mask_x1 = (depth_indices1.view(-1, 1)== depth_indices2.view(1, -1)).any(dim=1)
+    mask_y1 = (depth_indices2.view(-1, 1) == depth_indices1.view(1, -1)).any(dim=1)
+
     x2 = x1[mask_x1]
     y2 = y1[mask_y1]
     
     if x2.shape[0] <= k :
-        x2 = torch.zeros(k, 3)
-        y2 = torch.zeros(k, 3)
+        x2 = torch.zeros(k, 3 , device=x.device)
+        y2 = torch.zeros(k, 3,  device=y.device)
             
     pairwise_distance = F.pairwise_distance(x2, y2)
     # pairwise_distance = torch.cdist(x1,y1)
@@ -154,46 +165,68 @@ def two_images_side_by_side(img_a, img_b):
 def dense_map(Pts ,n, m, grid):
     ng = 2 * grid + 1
 
-    mX = np.zeros((m,n)) + np.float("inf")
-    mY = np.zeros((m,n)) + np.float("inf")
-    mD = np.zeros((m,n))
-    mX[np.int32(Pts[1]),np.int32(Pts[0])] = Pts[0] - np.round(Pts[0])
-    mY[np.int32(Pts[1]),np.int32(Pts[0])] = Pts[1] - np.round(Pts[1])
-    mD[np.int32(Pts[1]),np.int32(Pts[0])] = Pts[2]
+    # mX = np.zeros((m,n)) + np.float("inf")
+    # mY = np.zeros((m,n)) + np.float("inf")
+    # mD = np.zeros((m,n))
 
-    KmX = np.zeros((ng, ng, m - ng, n - ng))
-    KmY = np.zeros((ng, ng, m - ng, n - ng))
-    KmD = np.zeros((ng, ng, m - ng, n - ng))
+    # mX[np.int32(Pts[1]),np.int32(Pts[0])] = Pts[0] - np.round(Pts[0])
+    # mY[np.int32(Pts[1]),np.int32(Pts[0])] = Pts[1] - np.round(Pts[1])
+    # mD[np.int32(Pts[1]),np.int32(Pts[1])] = Pts[2]
+
+    # KmX = np.zeros((ng, ng, m - ng, n - ng))
+    # KmY = np.zeros((ng, ng, m - ng, n - ng))
+    # KmD = np.zeros((ng, ng, m - ng, n - ng))
+
+    mX = torch.full((m, n), float('inf'), dtype=torch.float32, device='cuda')
+    mY = torch.full((m, n), float('inf'), dtype=torch.float32, device='cuda')
+    mD = torch.zeros((m, n), dtype=torch.float32, device='cuda')
+
+    mX_idx = torch.tensor(Pts[1], dtype=torch.int64)
+    mY_idx = torch.tensor(Pts[0], dtype=torch.int64)
+
+    mX[mX_idx, mY_idx] = Pts[0] - torch.round(Pts[0])
+    mY[mX_idx, mY_idx] = Pts[1] - torch.round(Pts[1])
+    mD[mX_idx, mY_idx] = Pts[2]
+
+    KmX = torch.zeros((ng, ng, m - ng, n - ng), dtype=torch.float32, device='cuda')
+    KmY = torch.zeros((ng, ng, m - ng, n - ng), dtype=torch.float32, device='cuda')
+    KmD = torch.zeros((ng, ng, m - ng, n - ng), dtype=torch.float32, device='cuda')
 
     for i in range(ng):
         for j in range(ng):
             KmX[i,j] = mX[i : (m - ng + i), j : (n - ng + j)] - grid - 1 +i
             KmY[i,j] = mY[i : (m - ng + i), j : (n - ng + j)] - grid - 1 +i
             KmD[i,j] = mD[i : (m - ng + i), j : (n - ng + j)]
-    S = np.zeros_like(KmD[0,0])
-    Y = np.zeros_like(KmD[0,0])
+    # S = np.zeros_like(KmD[0,0])
+    # Y = np.zeros_like(KmD[0,0])
+    S = torch.zeros_like(KmD[0, 0])
+    Y = torch.zeros_like(KmD[0, 0])
 
     for i in range(ng):
         for j in range(ng):
-            s = 1/np.sqrt(KmX[i,j] * KmX[i,j] + KmY[i,j] * KmY[i,j])
+            # s = 1/np.sqrt(KmX[i,j] * KmX[i,j] + KmY[i,j] * KmY[i,j])
+            s = 1 / torch.sqrt(KmX[i, j] * KmX[i, j] + KmY[i, j] * KmY[i, j])
             Y = Y + s * KmD[i,j]
             S = S + s
 
     S[S == 0] = 1
-    out = np.zeros((m,n))
+    # out = np.zeros((m,n))
+    out = torch.zeros((m, n), dtype=torch.float32, device='cuda')
     out[grid + 1 : -grid, grid + 1 : -grid] = Y/S
     return out 
 
 def colormap(disp):
     """"Color mapping for disp -- [H, W] -> [3, H, W]"""
-#         disp_np = disp.cpu().numpy()        # tensor -> numpy
-    disp_np = disp
+    disp_np = disp.cpu().numpy()        # tensor -> numpy
+    # disp_np = disp
     vmax = np.percentile(disp_np, 95)
     normalizer = mpl.colors.Normalize(vmin=disp_np.min(), vmax=vmax)
     mapper = cm.ScalarMappable(norm=normalizer, cmap='magma')  #magma, plasma, etc.
     colormapped_im = (mapper.to_rgba(disp_np)[:, :, :3])
     # return colormapped_im.transpose(2, 0, 1)
-    return colormapped_im
+    colormapped_tensor = torch.from_numpy(colormapped_im).permute(2, 0, 1).to(dtype=torch.float32).cuda()
+    # colormapped_tensor = torch.from_numpy(colormapped_im).
+    return colormapped_tensor
 
 # corr dataset generation 
 def corr_gen( gt_points_index, points_index, gt_uv, uv , num_kp = 500) :
@@ -227,16 +260,24 @@ def corr_gen( gt_points_index, points_index, gt_uv, uv , num_kp = 500) :
 
 def corr_gen_withZ( gt_points_index, points_index, gt_uv, uv , gt_z, z, origin_img_shape, resized_shape, num_kp = 500) :
     
-    inter_gt_uv_mask = np.in1d(gt_points_index , points_index)
-    inter_uv_mask    = np.in1d(points_index , gt_points_index)
+    #only numpy operation
+    # inter_gt_uv_mask = np.in1d(gt_points_index , points_index)
+    # inter_uv_mask    = np.in1d(points_index , gt_points_index)
+
+    inter_gt_uv_mask = torch.tensor(np.in1d(gt_points_index.cpu().numpy(), points_index.cpu().numpy()), device='cuda')
+    inter_uv_mask = torch.tensor(np.in1d(points_index.cpu().numpy(), gt_points_index.cpu().numpy()), device='cuda')
     gt_uv = gt_uv[inter_gt_uv_mask]
     uv    = uv[inter_uv_mask] 
     gt_z = gt_z[inter_gt_uv_mask]
     z    = z[inter_uv_mask] 
-    gt_uvz = np.concatenate([gt_uv,gt_z], axis=1)
-    uvz= np.concatenate([uv,z],axis=1)
-    corrs = np.concatenate([gt_uvz, uvz], axis=1)
-    corrs = torch.tensor(corrs)
+    # gt_uvz = np.concatenate([gt_uv,gt_z], axis=1)
+    # uvz= np.concatenate([uv,z],axis=1)
+    # corrs = np.concatenate([gt_uvz, uvz], axis=1)
+    # corrs = torch.tensor(corrs)
+    gt_uvz = torch.cat([gt_uv, gt_z], dim=1)
+    uvz = torch.cat([uv, z], dim=1)
+    corrs = torch.cat([gt_uvz, uvz], dim=1)
+
     # gt_points = torch.tensor(gt_uvz)
     # target_points = torch.tensor(uvz)
     # scale_img = np.array (resized_shape) / np.array(origin_img_shape) 
