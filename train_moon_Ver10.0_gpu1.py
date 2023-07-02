@@ -37,7 +37,7 @@ from sacred import Experiment
 from sacred.utils import apply_backspaces_and_linefeeds
 
 from DatasetLidarCamera_Ver10_0 import DatasetLidarCameraKittiOdometry
-from losses_Ver10_0 import DistancePoints3D, GeometricLoss, L1Loss, ProposedLoss, CombinedLoss
+from losses_Ver10_1 import DistancePoints3D, GeometricLoss, L1Loss, ProposedLoss, CombinedLoss
 
 
 from quaternion_distances import quaternion_distance
@@ -86,22 +86,23 @@ def config():
     checkpoints = './checkpoints/'
     dataset = 'kitti/odom' # 'kitti/raw'
     # data_folder = "/home/ubuntu/data/kitti_odometry"
-    data_folder = "/mnt/sgvrnas/sjmoon/kitti/kitti_odometry"  # kaist gpu server 2 
+    # data_folder = "/mnt/sgvrnas/sjmoon/kitti/kitti_odometry"  # kaist gpu server 2 
     # data_folder = "/mnt/data/kitti_odometry" # KAIST GPU server 1
+    data_folder = "/mnt/sjmoon/kitti/kitti_odometry"  # sapeon desktop gpu 4090
     use_reflectance = False
     val_sequence = 7
     epochs = 200
-    BASE_LEARNING_RATE = 1e-5 # 1e-4
+    BASE_LEARNING_RATE = 5e-5 # 1e-4
     loss = 'combined'
     max_t = 0.2 # 1.5, 1.0,  0.5,  0.2,  0.1
     max_r = 7.5 # 20.0, 10.0, 5.0,  2.0,  1.0
-    batch_size = 140 # 120
+    batch_size = 120 # 120
     num_worker = 4
     network = 'Res_f1'
     optimizer = 'adamW'
     resume = False
     # weights = '/home/seongjoo/work/autocalib1/considering_project/checkpoints/kitti/odom/val_seq_07/models/checkpoint_r20.00_t1.50_e19_1.885.tar'
-    weights = './checkpoints/kitti/odom/val_seq_07/models/checkpoint_r7.50_t0.20_e49_4325.722.tar'
+    weights = './checkpoints/kitti/odom/val_seq_07/models/checkpoint_r20.00_t1.50_e164_67.193.tar'
     # weights = None
     rescale_rot = 1.0  #LCCNet initail value = 1.0 # value did not use
     rescale_transl = 100.0  #LCCNet initatil value = 2.0 # value did not use
@@ -112,7 +113,7 @@ def config():
     weight_point_cloud = 0.1 # 이값은 무시해도 됨 loss function에서 직접 관장 원래 LCCNet initail = 0.5
     log_frequency = 1000
     print_frequency = 50
-    starting_epoch = 23
+    starting_epoch = 1
     num_kp = 100
     dense_resoltuion = 2
     local_log_frequency = 50 
