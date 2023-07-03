@@ -114,11 +114,15 @@ def knn(x, y ,k):
     # mask_y1= np.in1d(depth_indices2,depth_indices1)
     # mask_x1 = (depth_indices1.view(-1, 1)== depth_indices2.view(1, -1)).any(dim=1)
     # mask_y1 = (depth_indices2.view(-1, 1) == depth_indices1.view(1, -1)).any(dim=1)
-    mask_x1 = torch.tensor([elem in depth_indices2.cpu().numpy() for elem in depth_indices1.cpu().numpy()], device=x.device, dtype=torch.bool)
-    mask_y1 = torch.tensor([elem in depth_indices1.cpu().numpy() for elem in depth_indices2.cpu().numpy()], device=y.device, dtype=torch.bool)
-
-    x2 = x1[mask_x1]
-    y2 = y1[mask_y1]
+    # mask_x1 = torch.tensor([elem in depth_indices2.cpu().numpy() for elem in depth_indices1.cpu().numpy()], device=x.device, dtype=torch.bool)
+    # mask_y1 = torch.tensor([elem in depth_indices1.cpu().numpy() for elem in depth_indices2.cpu().numpy()], device=y.device, dtype=torch.bool)
+    mask_x1 = torch.tensor([elem in depth_indices2.cpu().numpy().flatten() for elem in depth_indices1.cpu().numpy().flatten()], device=x.device, dtype=torch.bool)
+    mask_y1 = torch.tensor([elem in depth_indices1.cpu().numpy().flatten() for elem in depth_indices2.cpu().numpy().flatten()], device=y.device, dtype=torch.bool)
+    
+    x2 = x1.index_select(0, torch.nonzero(mask_x1).squeeze())
+    y2 = y1.index_select(0, torch.nonzero(mask_y1).squeeze())
+    # x2 = x1[mask_x1]
+    # y2 = y1[mask_y1]
     
     if x2.shape[0] <= k :
         x2 = torch.zeros(k, 3 , device=x.device)
