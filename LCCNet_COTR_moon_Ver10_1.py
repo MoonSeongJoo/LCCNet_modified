@@ -77,22 +77,20 @@ class MonoDepth():
         self.encoder_path       = os.path.join("./monodepth2/models", self.model_name, "encoder.pth")
         self.depth_decoder_path = os.path.join("./monodepth2/models", self.model_name, "depth.pth")
         
-        # device = torch.device("cuda")
-        # device = torch.device("cpu")
-        # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        device = torch.device("cuda")
         self.encoder = monodepth2.networks.ResnetEncoder(50, False)
         self.depth_decoder = monodepth2.networks.DepthDecoder(num_ch_enc=self.encoder.num_ch_enc, scales=range(4))
         
-        self.loaded_dict_enc = torch.load(self.encoder_path, map_location='cpu')
-        # self.loaded_dict_enc = torch.load(self.encoder_path, map_location='cuda:0')
+        self.loaded_dict_enc = torch.load(self.encoder_path, map_location=device)
+        # self.loaded_dict_enc = torch.load(self.encoder_path, map_location='cuda')
         self.filtered_dict_enc = {k: v for k, v in self.loaded_dict_enc.items() if k in self.encoder.state_dict()}
         self.encoder.load_state_dict(self.filtered_dict_enc)
         self.encoder.cuda()
         # self.encoder.to(device)
         # print ('encoder device : ' , next(self.encoder.parameters()).device)
 
-        self.loaded_dict = torch.load(self.depth_decoder_path, map_location='cpu')
-        # self.loaded_dict = torch.load(self.depth_decoder_path, map_location='cuda:0')
+        self.loaded_dict = torch.load(self.depth_decoder_path, map_location=device)
+        # self.loaded_dict = torch.load(self.depth_decoder_path, map_location='cuda')
         self.depth_decoder.load_state_dict(self.loaded_dict)
         # self.depth_decoder.to(device)
         self.depth_decoder.cuda()
@@ -175,11 +173,12 @@ class LCCNet(nn.Module):
             #     param.requires_grad = False
         
         # self.corr_engine = SparseEngine(corr_model, 32, mode='tile')
-        #self.fc1 = nn.Linear(fc_size * 4, 512)
-        #self.fc1_trasl = nn.Linear(512, 256)
+        
         self.leakyRELU = nn.LeakyReLU(0.1)
-        self.fc1 = nn.Linear(self.num_kp * 4 , 256) # select numer of corresepondence matching point * 2 shape[0] # ========= number of kp (self.num_kp) * 4 ===========
 
+        #self.fc1 = nn.Linear(fc_size * 4, 512)
+        self.fc1 = nn.Linear(self.num_kp * 2 , 256) # select numer of corresepondence matching point * 2 shape[0] # ========= number of kp (self.num_kp) * 4 ===========
+        #self.fc1_trasl = nn.Linear(512, 256)
         self.fc1_trasl = nn.Linear(256, 256)
         self.fc1_rot = nn.Linear(256, 256)
 
@@ -466,7 +465,7 @@ class LCCNet(nn.Module):
         # plt.subplot(211)
         # plt.imshow(torchvision.utils.make_grid(pred_corrs , normalize = True).permute(1,2,0))
         # plt.title("pred_corrs", fontsize=22)
-        # plt.axis('off')
+        # plt.axis('off') 
         # plt.show()        
 
         # plt.figure(figsize=(20, 40))
@@ -490,7 +489,11 @@ class LCCNet(nn.Module):
 #             cycle_loss = torch.nn.functional.mse_loss(cycle[mask], query[mask])        
         
         concat_pred_corrs = torch.cat((query_input,corrs_pred),dim=-1)
-        x = self.leakyRELU(concat_pred_corrs)
+        x_diff = concat_pred_corrs[:, :, 0] - concat_pred_corrs[:, :, 2]  # x - x1 차분
+        y_diff = concat_pred_corrs[:, :, 1] - concat_pred_corrs[:, :, 3]  # y - y1 차분
+        concat_pred_corrs_diff = torch.stack([x_diff, y_diff], dim=2)  # 차분 형태로 변환된 A (shape: (12, 100, 2))
+        
+        x = self.leakyRELU(concat_pred_corrs_diff)
         x = x.view(x.shape[0], -1)
         x = self.dropout(x)
         x = x.to('cuda')
