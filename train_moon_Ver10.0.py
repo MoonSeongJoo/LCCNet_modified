@@ -86,22 +86,22 @@ def config():
     checkpoints = './checkpoints/'
     dataset = 'kitti/odom' # 'kitti/raw'
     # data_folder = "/home/ubuntu/data/kitti_odometry"
-    data_folder = "/mnt/sgvrnas/sjmoon/kitti/kitti_odometry"  # kaist gpu server 2 
-    # data_folder = "/mnt/data/kitti_odometry" # KAIST GPU server 1
+    # data_folder = "/mnt/sgvrnas/sjmoon/kitti/kitti_odometry"  # kaist gpu server 2 
+    data_folder = "/mnt/data/kitti_odometry" # KAIST GPU server 1
     use_reflectance = False
     val_sequence = 7
     epochs = 200
-    BASE_LEARNING_RATE = 1e-3 # 1e-4
+    BASE_LEARNING_RATE = 1e-7 # 1e-4
     loss = 'combined'
     max_t = 1.5 # 1.5, 1.0,  0.5,  0.2,  0.1
     max_r = 20.0 # 20.0, 10.0, 5.0,  2.0,  1.0
-    batch_size = 24 # 120
+    batch_size = 20 # 120
     num_worker = 10
     network = 'Res_f1'
-    optimizer = 'adam'
-    resume = True
+    optimizer = 'adamW'
+    resume = False
     # weights = '/home/seongjoo/work/autocalib1/considering_project/checkpoints/kitti/odom/val_seq_07/models/checkpoint_r20.00_t1.50_e19_1.885.tar'
-    weights = './checkpoints/kitti/odom/val_seq_07/models/checkpoint_r20.00_t1.50_e21_1.850.tar'
+    weights = './checkpoints/kitti/odom/val_seq_07/models/checkpoint_r20.00_t1.50_e168_65.661.tar'
     # weights = None
     rescale_rot = 1.0  #LCCNet initail value = 1.0
     rescale_transl = 2.0  #LCCNet initatil value = 2.0
@@ -112,13 +112,15 @@ def config():
     weight_point_cloud = 0.1 # 이값은 무시해도 됨 loss function에서 직접 관장 원래 LCCNet initail = 0.5
     log_frequency = 1000
     print_frequency = 50
-    starting_epoch = 21
+    starting_epoch = 169
     num_kp = 100
     dense_resoltuion = 2
     local_log_frequency = 50 
 
-# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-os.environ["CUDA_VISIBLE_DEVICES"] = '1'
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+# os.environ["CUDA_VISIBLE_DEVICES"] = '0'
+print("-----device------=", device)
 
 EPOCH = 1
 def _init_fn(worker_id, seed):
@@ -384,13 +386,18 @@ def main(_config, _run, seed):
     if _config['optimizer'] == 'adam':
         optimizer = optim.Adam(parameters, lr=_config['BASE_LEARNING_RATE'], weight_decay=5e-6)
         # Probably this scheduler is not used
-        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[200], gamma=0.5)
+        scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[200], gamma=0.5)
 #         scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[20, 50, 70], gamma=0.3)
         # scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[20, 50, 70], gamma=0.5)
+    if _config['optimizer'] == 'adamW':
+        optimizer = optim.AdamW(parameters, lr=_config['BASE_LEARNING_RATE'], weight_decay=4e-4)
+        # scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[20,50,70], gamma=0.5)
+        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[200], gamma=0.5)
     else:
         optimizer = optim.SGD(parameters, lr=_config['BASE_LEARNING_RATE'], momentum=0.9,
                               weight_decay=5e-6, nesterov=True)
     
+    print ('--optimizer setting-- :' , _config['optimizer'] )
     ########## training resume setting ###############
     starting_epoch = _config['starting_epoch']
     if _config['weights'] is not None and _config['resume']:
@@ -411,6 +418,9 @@ def main(_config, _run, seed):
     for epoch in range(starting_epoch, _config['epochs'] + 1):
         EPOCH = epoch
         print('This is %d-th epoch' % epoch)
+        # 현재 학습률 확인
+        current_lr = optimizer.param_groups[0]['lr']
+        print("Current learning rate:", current_lr)
         epoch_start_time = time.time()
         
         total_train_loss = 0.
@@ -430,13 +440,15 @@ def main(_config, _run, seed):
         total_val_r = 0.
         rgb_resize_shape = [192,640,3]
         
-        if _config['optimizer'] != 'adam':
+        if _config['optimizer'] != 'adam' and _config['optimizer'] != 'adamW':
             _run.log_scalar("LR", _config['BASE_LEARNING_RATE'] *
                             math.exp((1 - epoch) * 4e-2), epoch)
             for param_group in optimizer.param_groups:
                 param_group['lr'] = _config['BASE_LEARNING_RATE'] * math.exp((1 - epoch) * 4e-2)
+                
         else:
-            #scheduler.step(epoch%100)
+            # scheduler.step(epoch%100)
+            scheduler.step()
             _run.log_scalar("LR", scheduler.get_lr()[0])
     
     ########### traing batch #############################
@@ -681,6 +693,10 @@ def main(_config, _run, seed):
 
         print("------------------------------------")
         print('epoch %d total training loss = %.3f' % (epoch, total_train_loss / len(dataset_train)))
+        print('epoch %d total corr loss = %.6f' % (epoch, sum_corr_loss / len(dataset_train)))
+        print('epoch %d total point loss = %.4f' % (epoch, sum_point_loss / len(dataset_train)))
+        print('epoch %d total trans loss = %.4f' % (epoch, sum_trans_loss / len(dataset_train)))
+        print('epoch %d total rot loss = %.4f' % (epoch, sum_rot_loss / len(dataset_train)))
         print('Total epoch time = %.2f' % (time.time() - epoch_start_time))
         print("------------------------------------")
         _run.log_scalar("Total training loss", total_train_loss / len(dataset_train), epoch)
