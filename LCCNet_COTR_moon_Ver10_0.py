@@ -47,8 +47,8 @@ cotr_args = easydict.EasyDict({
                 "out_dir" : "general_config['out']",
                 # "load_weights" : "None",
 #                 "load_weights_path" : './COTR/out/default/checkpoint.pth.tar' ,
-                "load_weights_path" : "./models/200_checkpoint.pth.tar",
-                # "load_weights_path" : None,
+                # "load_weights_path" : "./models/200_checkpoint.pth.tar",
+                "load_weights_path" : None,
                 "load_weights_freeze" : False ,
                 "max_corrs" : 1000 ,
                 "dim_feedforward" : 1024 , 
@@ -77,20 +77,22 @@ class MonoDepth():
         self.encoder_path       = os.path.join("./monodepth2/models", self.model_name, "encoder.pth")
         self.depth_decoder_path = os.path.join("./monodepth2/models", self.model_name, "depth.pth")
         
-        device = torch.device("cuda")
+        # device = torch.device("cuda")
+        # device = torch.device("cpu")
+        # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.encoder = monodepth2.networks.ResnetEncoder(50, False)
         self.depth_decoder = monodepth2.networks.DepthDecoder(num_ch_enc=self.encoder.num_ch_enc, scales=range(4))
         
-        self.loaded_dict_enc = torch.load(self.encoder_path, map_location=device)
-        # self.loaded_dict_enc = torch.load(self.encoder_path, map_location='cuda')
+        self.loaded_dict_enc = torch.load(self.encoder_path, map_location='cpu')
+        # self.loaded_dict_enc = torch.load(self.encoder_path, map_location='cuda:0')
         self.filtered_dict_enc = {k: v for k, v in self.loaded_dict_enc.items() if k in self.encoder.state_dict()}
         self.encoder.load_state_dict(self.filtered_dict_enc)
         self.encoder.cuda()
         # self.encoder.to(device)
         # print ('encoder device : ' , next(self.encoder.parameters()).device)
 
-        self.loaded_dict = torch.load(self.depth_decoder_path, map_location=device)
-        # self.loaded_dict = torch.load(self.depth_decoder_path, map_location='cuda')
+        self.loaded_dict = torch.load(self.depth_decoder_path, map_location='cpu')
+        # self.loaded_dict = torch.load(self.depth_decoder_path, map_location='cuda:0')
         self.depth_decoder.load_state_dict(self.loaded_dict)
         # self.depth_decoder.to(device)
         self.depth_decoder.cuda()
