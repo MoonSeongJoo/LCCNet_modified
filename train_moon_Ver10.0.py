@@ -101,7 +101,7 @@ def config():
     optimizer = 'adamW'
     resume = False
     # weights = '/home/seongjoo/work/autocalib1/considering_project/checkpoints/kitti/odom/val_seq_07/models/checkpoint_r20.00_t1.50_e19_1.885.tar'
-    weights = './checkpoints/kitti/odom/val_seq_07/models/checkpoint_r20.00_t1.50_e183_65.512.tar'
+    weights = './checkpoints/kitti/odom/val_seq_07/models/checkpoint_r20.00_t1.50_e168_65.661.tar'
     # weights = None
     rescale_rot = 1.0  #LCCNet initail value = 1.0
     rescale_transl = 2.0  #LCCNet initatil value = 2.0
@@ -112,14 +112,10 @@ def config():
     weight_point_cloud = 0.1 # 이값은 무시해도 됨 loss function에서 직접 관장 원래 LCCNet initail = 0.5
     log_frequency = 1000
     print_frequency = 50
-    starting_epoch = 184
+    starting_epoch = 169
     num_kp = 100
     dense_resoltuion = 2
-    local_log_frequency = 50
-    ##### re-training option ########
-    corr = None # COTR network freeze or not
-    regressor_freeze = None
-    regressor_init = None
+    local_log_frequency = 50 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -375,42 +371,6 @@ def main(_config, _run, seed):
         print('-------checkpoint-keys-------',checkpoint.keys() )
         saved_state_dict = checkpoint['state_dict']
         model.load_state_dict(saved_state_dict)
-    
-    # COTR network 층을 freeze 시킴
-    if _config['corr'] == 'freeze' :    
-        for name, param in model.corr.named_parameters():
-            param.requires_grad = False
-        print (f"COTR network {_config['corr']}")
-    
-    elif _config['corr'] == None :  
-        print (f"COTR network {_config['corr']}")
-
-    # to-do : regressor last network initailizing only
-    if _config['regressor_freeze'] == 'freeze' :
-        for name, param in model.named_parameters():
-            if name == 'fc1' or name == 'fc1_trasl' or name == 'fc1_rot':
-                param.requires_grad = False
-        print (f"regreesor network {_config['regressor_freeze']}")
-    
-    elif _config['regressor_freeze'] == None :
-        print (f"regreesor network {_config['regressor_freeze']}")
-    
-    if _config['regressor_init'] == 'init' :
-
-        for m in model.fc2_trasl.modules():
-            if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
-                nn.init.kaiming_normal_(m.weight.data, mode='fan_in')
-                if m.bias is not None:
-                    m.bias.data.zero_()
-        for m in model.fc2_rot.modules():
-            if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
-                nn.init.kaiming_normal_(m.weight.data, mode='fan_in')
-                if m.bias is not None:
-                    m.bias.data.zero_()
-        print (f"regreesor network init {_config['regressor_init']}")
-    
-    elif _config['regressor_init'] == None :
-        print (f"regreesor network init {_config['regressor_init']}")
 
     ########### parallel gpu loding ###########
     model = nn.DataParallel(model)
@@ -516,10 +476,10 @@ def main(_config, _run, seed):
                 real_shape = [sample['rgb'][idx].shape[0], sample['rgb'][idx].shape[1], sample['rgb'][idx].shape[2]]
                 rgb = sample['rgb'][idx]
                 # rgb = cv2.resize(rgb, (640,192), interpolation=cv2.INTER_LINEAR)
-                rgb = transforms.ToTensor()(rgb).cuda()
+                rgb = transforms.ToTensor()(rgb)
                 
                 #calibrated point cloud 2d projection
-                pc_lidar = sample['point_cloud'][idx].clone().cuda()
+                pc_lidar = sample['point_cloud'][idx].clone()
                 if _config['max_depth'] < 80.:
                     pc_lidar = pc_lidar[:, pc_lidar[0, :] < _config['max_depth']].clone()
                 
@@ -532,20 +492,18 @@ def main(_config, _run, seed):
                 T = mathutils.Matrix.Translation(sample['tr_error'][idx])
                 RT = T @ R
 
-                pc_rotated = rotate_back(sample['point_cloud'][idx].cuda(), RT) # Pc` = RT * Pc
+                pc_rotated = rotate_back(sample['point_cloud'][idx], RT) # Pc` = RT * Pc
                 if _config['max_depth'] < 80.:
                     pc_rotated = pc_rotated[:, pc_rotated[0, :] < _config['max_depth']].clone()
                 
                 depth_img, uv , z, points_index = lidar_project_depth(pc_rotated, sample['calib'][idx], real_shape) # image_shape
                 depth_img /= _config['max_depth']
                 
-                # lidarOnImage = np.hstack([uv, z])
-                lidarOnImage = torch.cat((uv, z), dim=1)
+                lidarOnImage = np.hstack([uv, z])
                 dense_depth_img = dense_map(lidarOnImage.T , real_shape[1], real_shape[0] , _config['dense_resoltuion']) # argument = (lidarOnImage.T , 1241, 376 , 8)
-                # dense_depth_img = dense_depth_img.astype(np.uint8)
-                dense_depth_img = dense_depth_img.to(dtype=torch.uint8)
+                dense_depth_img = dense_depth_img.astype(np.uint8)
                 dense_depth_img_color = colormap(dense_depth_img)
-                # dense_depth_img_color = transforms.ToTensor()(dense_depth_img_color)
+                dense_depth_img_color = transforms.ToTensor()(dense_depth_img_color)
                 
                 # PAD ONLY ON RIGHT AND BOTTOM SIDE
                 shape_pad = [0, 0, 0, 0]
@@ -561,9 +519,8 @@ def main(_config, _run, seed):
                 # corr dataset generation 
                 # corrs = corr_gen(gt_points_index, points_index , gt_uv, uv , _config["num_kp"])
                 corrs_with_z = corr_gen_withZ (gt_points_index, points_index , gt_uv, uv , gt_z, z, real_shape, rgb_resize_shape, _config["num_kp"] )
-                # corrs = np.concatenate([corrs_with_z[:,:2],corrs_with_z[:,3:5]], axis=1)
-                corrs = torch.cat([corrs_with_z[:, :2], corrs_with_z[:, 3:5]], dim=1)
-                # corrs = torch.tensor(corrs)
+                corrs = np.concatenate([corrs_with_z[:,:2],corrs_with_z[:,3:5]], axis=1)
+                corrs = torch.tensor(corrs)
                 
                 # batch stack 
                 rgb_input.append(rgb)
@@ -578,10 +535,10 @@ def main(_config, _run, seed):
             rgb_input = torch.stack(rgb_input) 
             rgb_show = rgb_input.clone()
             lidar_show = lidar_input.clone()
-            rgb_input = F.interpolate(rgb_input, size=[192, 640], mode="bilinear") # lidar 2d depth map input [192,640,1]
-            lidar_input = F.interpolate(lidar_input, size=[192, 640], mode="bilinear") # camera input = [192,640,3]
+            rgb_input = F.interpolate(rgb_input, size=[192, 640], mode="bilinear").cuda() # lidar 2d depth map input [192,640,1]
+            lidar_input = F.interpolate(lidar_input, size=[192, 640], mode="bilinear").cuda() # camera input = [192,640,3]
             # lidar_input = torch.cat((lidar_input,lidar_input,lidar_input), 1)
-            corrs_input = torch.stack(corrs_input)
+            corrs_input = torch.stack(corrs_input).cuda()
             
             
             # ####### display input signal #########        
@@ -797,20 +754,24 @@ def main(_config, _run, seed):
                 T = mathutils.Matrix.Translation(sample['tr_error'][idx])
                 RT = T @ R
 
-                pc_rotated = rotate_back(sample['point_cloud'][idx].cuda(), RT) # Pc` = RT * Pc
+                pc_rotated = rotate_back(sample['point_cloud'][idx], RT) # Pc` = RT * Pc
                 if _config['max_depth'] < 80.:
                     pc_rotated = pc_rotated[:, pc_rotated[0, :] < _config['max_depth']].clone()
                 
                 depth_img, uv , z,  points_index = lidar_project_depth(pc_rotated, sample['calib'][idx], real_shape) # image_shape
                 depth_img /= _config['max_depth']
 
-                # lidarOnImage = np.hstack([uv, z])
-                lidarOnImage = torch.cat((uv, z), dim=1)
+                lidarOnImage = np.hstack([uv, z])
                 dense_depth_img = dense_map(lidarOnImage.T , real_shape[1], real_shape[0] , _config['dense_resoltuion']) # argument = (lidarOnImage.T , 1241, 376 , 8)
-                # dense_depth_img = dense_depth_img.astype(np.uint8)
-                dense_depth_img = dense_depth_img.to(dtype=torch.uint8)
+                dense_depth_img = dense_depth_img.astype(np.uint8)
                 dense_depth_img_color = colormap(dense_depth_img)
-                # dense_depth_img_color = transforms.ToTensor()(dense_depth_img_color)                
+                dense_depth_img_color = transforms.ToTensor()(dense_depth_img_color)                
+                
+                lidarOnImage = np.hstack([uv, z])
+                dense_depth_img = dense_map(lidarOnImage.T , real_shape[1], real_shape[0] , _config['dense_resoltuion']) # argument = (lidarOnImage.T , 1241, 376 , 8)
+                dense_depth_img = dense_depth_img.astype(np.uint8)
+                dense_depth_img_color = colormap(dense_depth_img)
+                dense_depth_img_color = transforms.ToTensor()(dense_depth_img_color)  
                 
                 # PAD ONLY ON RIGHT AND BOTTOM SIDE
                 shape_pad = [0, 0, 0, 0]
@@ -827,9 +788,8 @@ def main(_config, _run, seed):
                 # corrs = corr_gen(gt_points_index, points_index , gt_uv, uv , _config["num_kp"])
                 # corrs = corrs.cuda()
                 corrs_with_z = corr_gen_withZ (gt_points_index, points_index , gt_uv, uv , gt_z, z, real_shape, rgb_resize_shape, _config["num_kp"] )
-                # corrs = np.concatenate([corrs_with_z[:,:2],corrs_with_z[:,3:5]], axis=1)
-                corrs = torch.cat([corrs_with_z[:, :2], corrs_with_z[:, 3:5]], dim=1)
-                # corrs = torch.tensor(corrs)
+                corrs = np.concatenate([corrs_with_z[:,:2],corrs_with_z[:,3:5]], axis=1)
+                corrs = torch.tensor(corrs)
                 
                 # batch stack 
                 rgb_input.append(rgb)

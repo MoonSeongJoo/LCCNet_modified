@@ -332,7 +332,7 @@ def corr_gen_withZ( gt_points_index, points_index, gt_uv, uv , gt_z, z, origin_i
     if corrs.shape[0] <= num_kp :
         # corrs = torch.zeros(num_kp, 6)
         diff = num_kp - corrs.shape[0]
-        rand_values = torch.randn(diff, 6).cuda()
+        rand_values = torch.randn(diff, 6)
         corrs = torch.cat([corrs, rand_values], dim=0)
         # target_points = torch.zeros(num_kp, 3)
         # corrs[:, 2] = corrs[:, 2] + 0.5 # for only uv matching
