@@ -63,3 +63,4 @@ train_with_sacred.py
 COTR/out/default.zip
 COTR/out/default/checkpoint.pth.tar
 COTR/out/model/76000_0.0008val_checkpoint.pth.tar
+*.pyc
