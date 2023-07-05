@@ -96,8 +96,8 @@ def config():
     loss = 'combined'
     max_t = 1.5 # 1.5, 1.0,  0.5,  0.2,  0.1
     max_r = 20.0 # 20.0, 10.0, 5.0,  2.0,  1.0
-    batch_size = 15 # 120
-    num_worker = 4
+    batch_size = 10 # 120
+    num_worker = 10
     network = 'Res_f1'
     optimizer = 'adamW'
     resume = False
