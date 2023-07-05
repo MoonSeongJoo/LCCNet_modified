@@ -87,22 +87,23 @@ def config():
     dataset = 'kitti/odom' # 'kitti/raw'
     # data_folder = "/home/ubuntu/data/kitti_odometry"
     # data_folder = "/mnt/sgvrnas/sjmoon/kitti/kitti_odometry"  # kaist gpu server 2 
+    # data_folder = "/mnt/sgvrnas/sjmoon/kitti/kitti_odometry"  # kaist gpu server 2 
     # data_folder = "/mnt/data/kitti_odometry" # KAIST GPU server 1
-    data_folder = "/data/kitti/kitti_odometry"  # sapeon gpu server 1 
+    data_folder = "/mnt/sjmoon/kitti/kitti_odometry"  # sapeon desktop gpu 4090
     use_reflectance = False
     val_sequence = 7
     epochs = 200
-    BASE_LEARNING_RATE = 5e-6 # 1e-4
+    BASE_LEARNING_RATE = 1e-4 # 1e-4
     loss = 'combined'
-    max_t = 0.2 # 1.5, 1.0,  0.5,  0.2,  0.1
-    max_r = 7.5 # 20.0, 10.0, 5.0,  2.0,  1.0
-    batch_size = 500 # 120
+    max_t = 1.5 # 1.5, 1.0,  0.5,  0.2,  0.1
+    max_r = 20.0 # 20.0, 10.0, 5.0,  2.0,  1.0
+    batch_size = 15 # 120
     num_worker = 10
     network = 'Res_f1'
     optimizer = 'adamW'
-    resume = False
+    resume = True
     # weights = '/home/seongjoo/work/autocalib1/considering_project/checkpoints/kitti/odom/val_seq_07/models/checkpoint_r20.00_t1.50_e19_1.885.tar'
-    weights = './checkpoints/kitti/odom/val_seq_07/models/checkpoint_r7.50_t0.20_e9_4678.415.tar'
+    weights = './checkpoints/kitti/odom/val_seq_07/models/checkpoint_r20.00_t1.50_e18_395.210.tar'
     # weights = None
     rescale_rot = 1.0  #LCCNet initail value = 1.0 # value did not use
     rescale_transl = 100.0  #LCCNet initatil value = 2.0 # value did not use
@@ -118,12 +119,12 @@ def config():
     dense_resoltuion = 2
     local_log_frequency = 50 
     ##### re-training option ########
-    corr = 'freeze' # COTR network freeze or not
-    regressor_freeze = 'freeze'
+    corr = None # COTR network freeze or not
+    regressor_freeze = None
     regressor_init = None
 
 # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-os.environ["CUDA_VISIBLE_DEVICES"] = '3'
+os.environ["CUDA_VISIBLE_DEVICES"] = '0'
 
 EPOCH = 1
 def _init_fn(worker_id, seed):
@@ -381,12 +382,16 @@ def main(_config, _run, seed):
         for name, param in model.corr.named_parameters():
             param.requires_grad = False
         print (f"COTR network {_config['corr']}")
+    elif _config['corr'] == None :  
+        print (f"COTR network {_config['corr']}")
 
     # to-do : regressor last network initailizing only
     if _config['regressor_freeze'] == 'freeze' :
         for name, param in model.named_parameters():
             if name == 'fc1' or name == 'fc1_trasl' or name == 'fc1_rot':
                 param.requires_grad = False
+        print (f"regreesor network {_config['regressor_freeze']}")
+    elif _config['regressor_freeze'] == None :
         print (f"regreesor network {_config['regressor_freeze']}")
     
     if _config['regressor_init'] == 'init' :

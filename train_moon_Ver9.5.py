@@ -86,11 +86,7 @@ def config():
     checkpoints = './checkpoints/'
     dataset = 'kitti/odom' # 'kitti/raw'
     data_folder = "/home/ubuntu/data/kitti_odometry"
-<<<<<<< HEAD
-    # data_folder = "/mnt/sgvrnas/sjmoon/kitti/kitti_odometry"
-=======
     # data_folder = "/mnt/data/kitti_odometry"
->>>>>>> 0b04013d43288712cb59d03ea07984d1345bb0fb
     use_reflectance = False
     val_sequence = 7
     epochs = 200
@@ -98,7 +94,7 @@ def config():
     loss = 'combined'
     max_t = 1.5 # 1.5, 1.0,  0.5,  0.2,  0.1
     max_r = 20.0 # 20.0, 10.0, 5.0,  2.0,  1.0
-    batch_size = 6 # 120
+    batch_size = 1 # 120
     num_worker = 16
     network = 'Res_f1'
     optimizer = 'adam'

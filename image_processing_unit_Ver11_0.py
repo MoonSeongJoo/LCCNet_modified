@@ -1,4 +1,3 @@
-    
 import torch
 import numpy as np
 import torch.nn.functional as F
@@ -61,6 +60,38 @@ def trim_corrs(in_corrs):
         mask = np.random.choice(length, self.num_kp - length)
         return np.concatenate([in_corrs, in_corrs[mask]], axis=0)
 
+def farthest_point_sampling(points, k):
+    """
+    Args:
+        points (torch.Tensor): (N, 3) shape의 포인트 집합
+        k (int): 선택할 중심 포인트의 개수
+    Returns:
+        torch.Tensor: (k, 3) shape의 선택된 중심 포인트 좌표
+        torch.Tensor: (k) shape의 선택된 중심 포인트 인덱스
+    """
+    N, _ = points.shape
+    centroids = torch.zeros(k, dtype=torch.long, device=points.device)
+    distance = torch.ones(N, device=points.device) * 1e10
+
+    # 첫 번째 중심 포인트를 무작위로 선택
+    farthest = torch.randint(0, N, (1,), dtype=torch.long, device=points.device)
+
+    for i in range(k):
+        # 가장 먼 지점을 중심 포인트로 선택
+        centroids[i] = farthest
+        centroid = points[farthest, :].view(1, 3)
+
+        # 선택한 중심 포인트와 다른 모든 포인트 간의 거리 계산
+        dist = torch.sum((points - centroid) ** 2, dim=-1)
+        mask = dist < distance
+        distance[mask] = dist[mask]
+
+        # 가장 먼 포인트를 찾는다
+        farthest = torch.max(distance, dim=0)[1]
+
+    # 선택된 중심 포인트 좌표 및 인덱스 반환
+    return centroids ,points[centroids]
+
 def knn(x, y ,k):
 # #         print (" x shape = " , x.shape)
 #         inner = -2*torch.matmul(x.transpose(-2, 1), x)
@@ -121,38 +152,25 @@ def knn(x, y ,k):
     y2 = y1.index_select(0, torch.nonzero(mask_y1).squeeze())
     # x2 = x1[mask_x1]
     # y2 = y1[mask_y1]
-    # x2 = x1[mask_x1.unsqueeze(1).expand(-1, x1.shape[1])]
-    # y2 = y1[mask_y1.unsqueeze(1).expand(-1, y1.shape[1])]
-
+    
     if x2.shape[0] <= k :
-        ### 부족하면 무조건 영행렬
         # x2 = torch.zeros(k, 3 , device=x.device)
         # y2 = torch.zeros(k, 3,  device=y.device)
-        
         ### 부족하면 무조건 랜덤 수 채우기
         x2 = torch.rand(k, 3).cuda()
         y2 = torch.rand(k, 3).cuda()
-        
-        # ### 부족한 부분만 랜덤한 수로 채움
-        # # 부족한 행의 수를 계산
-        # missing_rows = k - x2.shape[0]
-
-        # # 부족한 행에 대해 랜덤값을 가진 행렬 생성
-        # additional_x2 = torch.rand(missing_rows, 3, device=x.device)
-        # additional_y2 = torch.rand(missing_rows, 3, device=y.device)
-
-        # # 원래의 x2와 y2 행렬에 랜덤 행렬을 연결
-        # x2 = torch.cat((x2, additional_x2), dim=0)
-        # y2 = torch.cat((y2, additional_y2), dim=0)
             
-    pairwise_distance = F.pairwise_distance(x2, y2)
-    # pairwise_distance = torch.cdist(x1,y1)
-
-    idx = pairwise_distance.topk(k=k, dim=-1)[1]   # (batch_size, num_points, k)
+  
+    #### 유사한 포인트 뽑기 using KNN #####
+    # pairwise_distance = F.pairwise_distance(x2, y2)
+    # idx = pairwise_distance.topk(k=k, dim=-1)[1]   # (batch_size, num_points, k)
     # top_indices = torch.topk(pairwise_distance.flatten(), k=k, largest=False)
     # top_indices = top_indices.indices
     # indices = np.unravel_index(top_indices, pairwise_distance.shape)
     # top_indices = np.asarray(top_indices).T
+    
+    #### 가장 먼 포인트 들 뽑기 #########
+    idx ,_ = farthest_point_sampling(x2,k)
 
     top_x = x2[idx]
     top_y = y2[idx]

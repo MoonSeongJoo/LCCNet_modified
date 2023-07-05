@@ -85,8 +85,8 @@ poses_path = "data_odometry_poses"
 def config():
     checkpoints = './checkpoints/'
     dataset = 'kitti/odom' # 'kitti/raw'
-    data_folder = "/home/ubuntu/data/kitti_odometry"
-    # data_folder = "/mnt/data/kitti_odometry"
+    # data_folder = "/home/ubuntu/data/kitti_odometry"
+    data_folder = "/mnt/data/kitti_odometry"
     use_reflectance = False
     val_sequence = 6
     epochs = 200
@@ -94,7 +94,7 @@ def config():
     loss = 'combined'
     max_t = 1.5 # 1.5, 1.0,  0.5,  0.2,  0.1
     max_r = 20.0 # 20.0, 10.0, 5.0,  2.0,  1.0
-    batch_size = 10 # 120
+    batch_size = 2 # 120
     num_worker = 16
     network = 'Res_f1'
     optimizer = 'adamW'
@@ -115,8 +115,8 @@ def config():
     dense_resoltuion = 2
     local_log_frequency = 50 
 
-# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-os.environ["CUDA_VISIBLE_DEVICES"] = '0'
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# os.environ["CUDA_VISIBLE_DEVICES"] = '0'
 
 EPOCH = 1
 def _init_fn(worker_id, seed):
