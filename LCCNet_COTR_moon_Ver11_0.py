@@ -484,7 +484,7 @@ class LCCNet(nn.Module):
         query_reverse[..., 0] = query_reverse[..., 0] - 0.5
         cycle = self.corr(img_reverse_input, query_reverse)['pred_corrs']
         cycle[..., 0] = cycle[..., 0] - 0.5
-        mask = torch.norm(cycle - query_input, dim=-1) < 10 / 1280
+        mask = torch.norm(cycle - query_input, dim=-1) < 10 / 640
 #         if mask.sum() > 0:
 #             ('enter cyclic loss mask sum')
 #             cycle_loss = torch.nn.functional.mse_loss(cycle[mask], query[mask])        
