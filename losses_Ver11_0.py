@@ -112,14 +112,15 @@ class CombinedLoss(nn.Module):
         self.rescale_trans = rescale_trans
         self.rescale_rot = rescale_rot
         self.transl_loss = nn.SmoothL1Loss(reduction='none')        
-        # self.weight_corr = 10000.0
         
+        self.weight_corr = 100000.0
         self.weight_point_cloud = 1.0 
-        self.weight_rot = 100000.0
+        self.weight_rot = 1.0
         self.weight_trans = 1.0
         self.loss = {} 
-        # print ( "------- loss weight corr --------" , self.weight_corr )
+        
         print ( "------- devide weght rot/trans--------")
+        print ( "------- loss weight corr --------" , self.weight_corr )
         print ( "------- loss weight point cloud -------- " , self.weight_point_cloud )
         print ( "------- loss weight rot --------" , self.weight_rot)
         print ( "------- loss weight trans --------" , self.weight_trans)
@@ -216,7 +217,7 @@ class CombinedLoss(nn.Module):
         #              self.weight_point_cloud * (point_clouds_loss/target_transl.shape[0]) + self.weight_corr * corr_loss
         # total_loss = self.weight_pose * pose_loss +\
         #              self.weight_point_cloud * (point_clouds_loss/target_transl.shape[0]) 
-        total_loss = self.weight_rot* loss_rot  + self.weight_trans* loss_transl +\
+        total_loss = self.weight_rot* loss_rot  + self.weight_trans* loss_transl + self.weight_corr * corr_loss +\
                      self.weight_point_cloud * (point_clouds_loss/target_transl.shape[0]) 
         self.loss['total_loss'] = total_loss
         self.loss['transl_loss'] = loss_transl
