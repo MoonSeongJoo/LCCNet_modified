@@ -475,7 +475,7 @@ class LCCNet(nn.Module):
         # plt.axis('off')
         # plt.show()
         # print ('------------- display end for analysis-------------')
-        ##### end of display corrs images #############
+        # ##### end of display corrs images #############
         
         img_reverse_input = torch.cat([img_input[..., 640:], img_input[..., :640]], axis=-1)
         ##cyclic loss pre-processing

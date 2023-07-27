@@ -48,7 +48,7 @@ from utils import (mat2xyzrpy, merge_inputs, overlay_imgs, quat2mat,
                    tvector2mat)
 
 from image_processing_unit_Ver11_0 import lidar_project_depth , corr_gen , corr_gen_withZ , dense_map , colormap
-from LCCNet_COTR_moon_Ver11_2_calibflow import LCCNet
+from LCCNet_COTR_moon_Ver11_1_kaist_server1_GPU0 import LCCNet
 #from COTR.inference.sparse_engine_Ver3 import SparseEngine
 import warnings
 warnings.filterwarnings('ignore')
@@ -85,24 +85,24 @@ poses_path = "data_odometry_poses"
 def config():
     checkpoints = './checkpoints/'
     dataset = 'kitti/odom' # 'kitti/raw'
+    # data_folder = "/home/ubuntu/data/kitti_odometry"
     # data_folder = "/mnt/sgvrnas/sjmoon/kitti/kitti_odometry"  # kaist gpu server 2 
-    # data_folder = "/mnt/data/kitti_odometry" # KAIST GPU server 1
+    data_folder = "/mnt/data/kitti_odometry" # KAIST GPU server 1
     # data_folder = "/mnt/sjmoon/kitti/kitti_odometry"  # sapeon desktop gpu 4090
-    data_folder = "/data/kitti/kitti_odometry" # sapeon server gpu a100
     use_reflectance = False
     val_sequence = 7
     epochs = 200
-    BASE_LEARNING_RATE = 1e-5 # 1e-4
+    BASE_LEARNING_RATE = 1e-4 # 1e-4
     loss = 'combined'
-    max_t = 1.5 # 1.5, 1.0,  0.5,  0.2,  0.1
-    max_r = 20.0 # 20.0, 10.0, 5.0,  2.0,  1.0
-    batch_size = 15 # 120
+    max_t = 0.2 # 1.5, 1.0,  0.5,  0.2,  0.1
+    max_r = 7.5 # 20.0, 10.0, 5.0,  2.0,  1.0
+    batch_size = 20 # 120
     num_worker = 10
     network = 'Res_f1'
     optimizer = 'adamW'
     resume = False
     # weights = '/home/seongjoo/work/autocalib1/considering_project/checkpoints/kitti/odom/val_seq_07/models/checkpoint_r20.00_t1.50_e19_1.885.tar'
-    weights = './checkpoints/kitti/odom/val_seq_07/models/checkpoint_r20.00_t1.50_e64_5.575.tar'
+    weights = './checkpoints/kitti/odom/val_seq_07/models/checkpoint_r0.00_t0.00_e20_8.217.tar'
     # weights = None
     rescale_rot = 1.0  #LCCNet initail value = 1.0 # value did not use
     rescale_transl = 100.0  #LCCNet initatil value = 2.0 # value did not use
@@ -118,12 +118,13 @@ def config():
     dense_resoltuion = 2
     local_log_frequency = 50
     ##### re-training option ########
-    corr = None # COTR network freeze or not
+    corr = 'freeze' # COTR network freeze or not
+    last_corr ='fine_tuning'
     regressor_freeze = None
     regressor_init = None
 
 # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-os.environ["CUDA_VISIBLE_DEVICES"] = '2'
+os.environ["CUDA_VISIBLE_DEVICES"] = '0'
 
 EPOCH = 1
 def _init_fn(worker_id, seed):
@@ -381,6 +382,10 @@ def main(_config, _run, seed):
         for name, param in model.corr.named_parameters():
             param.requires_grad = False
         print (f"COTR network {_config['corr']}")
+        if _config['last_corr'] == 'fine_tuning' :
+            for name, param in model.corr.corr_embed.named_parameters():
+                param.requires_grad = True
+            print (f"COTR last network {_config['last_corr']}")
     elif _config['corr'] == None :  
         print (f"COTR network {_config['corr']}")
 
