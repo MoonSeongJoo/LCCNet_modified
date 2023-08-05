@@ -48,7 +48,7 @@ from utils import (mat2xyzrpy, merge_inputs, overlay_imgs, quat2mat,
                    tvector2mat)
 
 from image_processing_unit_Ver11_0 import lidar_project_depth , corr_gen , corr_gen_withZ , dense_map , colormap
-from LCCNet_COTR_moon_Ver11_1_kaist_server2_GPU1 import LCCNet
+from LCCNet_COTR_moon_Ver11_1_kaist_server2_GPU1 import LCCNet ,LCCNet_old,LCCNet_old1
 #from COTR.inference.sparse_engine_Ver3 import SparseEngine
 import warnings
 warnings.filterwarnings('ignore')
@@ -94,15 +94,15 @@ def config():
     epochs = 200
     BASE_LEARNING_RATE = 1e-4 # 1e-4
     loss = 'combined'
-    max_t = 1.5 # 1.5, 1.0,  0.5,  0.2,  0.1
-    max_r = 20.0 # 20.0, 10.0, 5.0,  2.0,  1.0
-    batch_size = 10 # 120
-    num_worker = 10
+    max_t = 0.25 # 1.5, 1.0,  0.5,  0.2,  0.1
+    max_r = 10.0 # 20.0, 10.0, 5.0,  2.0,  1.0
+    batch_size = 15 # 120
+    num_worker = 8
     network = 'Res_f1'
     optimizer = 'adamW'
     resume = False
     # weights = '/home/seongjoo/work/autocalib1/considering_project/checkpoints/kitti/odom/val_seq_07/models/checkpoint_r20.00_t1.50_e19_1.885.tar'
-    weights = './checkpoints/kitti/odom/val_seq_07/models/checkpoint_r20.00_t1.50_e167_64.083.tar'
+    weights = './checkpoints/kitti/odom/val_seq_07/models/checkpoint_r10.00_t0.25_e5_0.983.tar'
     # weights = None
     rescale_rot = 1.0  #LCCNet initail value = 1.0 # value did not use
     rescale_transl = 100.0  #LCCNet initatil value = 2.0 # value did not use
@@ -113,17 +113,19 @@ def config():
     weight_point_cloud = 0.1 # 이값은 무시해도 됨 loss function에서 직접 관장 원래 LCCNet initail = 0.5
     log_frequency = 1000
     print_frequency = 50
-    starting_epoch = 168
+    starting_epoch = 6
     num_kp = 100
     dense_resoltuion = 2
     local_log_frequency = 50
     ##### re-training option ########
-    corr = None # COTR network freeze or not
+    corr = 'freeze' # COTR network freeze or not
+    last_corr = None
+    last_corr_init = None
     regressor_freeze = None
     regressor_init = None
 
 # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-os.environ["CUDA_VISIBLE_DEVICES"] = '1'
+os.environ["CUDA_VISIBLE_DEVICES"] = '0'
 
 EPOCH = 1
 def _init_fn(worker_id, seed):
@@ -348,7 +350,39 @@ def main(_config, _run, seed):
         loss_fn = CombinedLoss(_config['rescale_transl'], _config['rescale_rot'], _config['weight_point_cloud'])
     else:
         raise ValueError("Unknown Loss Function")
-    
+
+    # network choice and settings
+    if _config['network'].startswith('Res'):
+        feat = 1
+        md = 4
+        split = _config['network'].split('_')
+        for item in split[1:]:
+            if item.startswith('f'):
+                feat = int(item[-1])
+            elif item.startswith('md'):
+                md = int(item[2:])
+        assert 0 < feat < 7, "Feature Number from PWC have to be between 1 and 6"
+        assert 0 < md, "md must be positive"   
+        ### old netwrok define ####
+        model_old = LCCNet_old1(input_size, use_feat_from=feat, md=md,
+                    use_reflectance=_config['use_reflectance'], dropout=_config['dropout'],
+                    Action_Func='leakyrelu', attention=False, res_num=50 , num_kp = _config['num_kp'] )
+
+    else:
+        raise TypeError("Network unknown")
+
+    if _config['weights'] is not None:
+        print(f"Loading weights from {_config['weights']}")
+        checkpoint = torch.load(_config['weights'], map_location='cuda:0')
+        # checkpoint = torch.load(_config['weights'], map_location='')
+        print('-------checkpoint-keys-------',checkpoint.keys() )
+        saved_state_dict = checkpoint['state_dict']
+        model_old.load_state_dict(saved_state_dict)
+        corr_net_loaded = model_old.corr
+        print("old model only corr network loaded")
+        for name, param_old in model_old.corr.named_parameters():
+            param_old.requires_grad = False
+
     # network choice and settings
     if _config['network'].startswith('Res'):
         feat = 1
@@ -362,27 +396,32 @@ def main(_config, _run, seed):
         assert 0 < feat < 7, "Feature Number from PWC have to be between 1 and 6"
         assert 0 < md, "md must be positive"   
         ### netwrok define ####
-        model = LCCNet(input_size, use_feat_from=feat, md=md,
+        model = LCCNet(corr_net_loaded, input_size, use_feat_from=feat, md=md,
                          use_reflectance=_config['use_reflectance'], dropout=_config['dropout'],
                          Action_Func='leakyrelu', attention=False, res_num=50 , num_kp = _config['num_kp'] )
-
-    else:
-        raise TypeError("Network unknown")
-    if _config['weights'] is not None:
-        print(f"Loading weights from {_config['weights']}")
-        checkpoint = torch.load(_config['weights'], map_location='cuda:0')
-        # checkpoint = torch.load(_config['weights'], map_location='')
-        print('-------checkpoint-keys-------',checkpoint.keys() )
-        saved_state_dict = checkpoint['state_dict']
-        model.load_state_dict(saved_state_dict)
 
     # COTR network 층을 freeze 시킴
     if _config['corr'] == 'freeze' :    
         for name, param in model.corr.named_parameters():
             param.requires_grad = False
         print (f"COTR network {_config['corr']}")
+        if _config['last_corr'] == 'fine_tuning' :
+            for name, param in model.corr.corr_embed.named_parameters():
+                param.requires_grad = True
+            print (f"COTR last network {_config['last_corr']}")    
     elif _config['corr'] == None :  
         print (f"COTR network {_config['corr']}")
+    
+    if _config['last_corr_init'] == 'init' :
+        for m in model.corr.corr_embed.layers:
+            if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
+                nn.init.kaiming_normal_(m.weight.data, mode='fan_in')
+            if m.bias is not None:
+                m.bias.data.zero_()
+        print (f"COTR last network {_config['last_corr_init']}")
+    elif _config['last_corr_init'] == None :
+        print (f"COTR last network {_config['last_corr_init']}")
+
 
     # to-do : regressor last network initailizing only
     if _config['regressor_freeze'] == 'freeze' :
@@ -395,6 +434,26 @@ def main(_config, _run, seed):
     
     if _config['regressor_init'] == 'init' :
 
+        for m in model.fc1_tarsl_aggr.modules():
+            if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
+                nn.init.kaiming_normal_(m.weight.data, mode='fan_in')
+                if m.bias is not None:
+                    m.bias.data.zero_()
+        for m in model.fc1_rot_aggr.modules():
+            if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
+                nn.init.kaiming_normal_(m.weight.data, mode='fan_in')
+                if m.bias is not None:
+                    m.bias.data.zero_()
+        for m in model.fc1_trasl.modules():
+            if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
+                nn.init.kaiming_normal_(m.weight.data, mode='fan_in')
+                if m.bias is not None:
+                    m.bias.data.zero_()
+        for m in model.fc1_rot.modules():
+            if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
+                nn.init.kaiming_normal_(m.weight.data, mode='fan_in')
+                if m.bias is not None:
+                    m.bias.data.zero_()
         for m in model.fc2_trasl.modules():
             if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
                 nn.init.kaiming_normal_(m.weight.data, mode='fan_in')
@@ -405,10 +464,10 @@ def main(_config, _run, seed):
                 nn.init.kaiming_normal_(m.weight.data, mode='fan_in')
                 if m.bias is not None:
                     m.bias.data.zero_()
-        print (f"regreesor network init {_config['regressor_init']}")
+        print (f"regreesor network init : {_config['regressor_init']}")
     
     elif _config['regressor_init'] == None :
-        print (f"regreesor network init {_config['regressor_init']}")
+        print (f"regreesor network init : {_config['regressor_init']}")
     
     ########### parallel gpu loding ###########
     model = nn.DataParallel(model)

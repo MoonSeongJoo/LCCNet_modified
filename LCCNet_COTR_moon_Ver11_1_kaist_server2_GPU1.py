@@ -139,13 +139,101 @@ class STNNet(nn.Module):
         x = F.grid_sample(x, grid)
 
         return x
-    
-class LCCNet(nn.Module):
+
+class LCCNet_old(nn.Module):
     """
     Based on the PWC-DC net. add resnet encoder, dilation convolution and densenet connections
     """
 
     def __init__(self, image_size =64, use_feat_from=1, md=4, use_reflectance=False, dropout=0.0,
+                 Action_Func='leakyrelu', attention=False, res_num=50 , num_kp=500 ):
+        """
+        input: md --- maximum displacement (for correlation. default: 4), after warpping
+        """
+        super(LCCNet_old, self).__init__()
+        self.num_kp = num_kp
+        
+        self.mono = MonoDepth() # depth estimation by monodepth2
+        # self.STN = STNNet()
+        # TODO : change correlation to correspendence Transformer algorithm
+        
+        self.corr = build(cotr_args)
+        
+        # # TODO : load COTR pre-trained model    
+        # if cotr_args.load_weights_path is not None:
+        #     print(f"Loading weights from {cotr_args.load_weights_path}")
+        #     weights = torch.load(cotr_args.load_weights_path, map_location='cuda')['model_state_dict']
+        #     # weights = torch.load(cotr_args.load_weights_path, map_location='gpu')['model_state_dict']
+        #     utils.safe_load_weights(self.corr, weights)
+        
+        # if cotr_args.load_weights_freeze is True:
+        #     print("COTR pre-trained weights freeze")
+        #     corr_model =self.corr.eval()
+        #     # for param in self.corr.parameters():
+        #     #     param.requires_grad = False
+        
+        # self.corr_engine = SparseEngine(corr_model, 32, mode='tile')
+        
+        self.leakyRELU = nn.LeakyReLU(0.1)
+
+        #self.fc1 = nn.Linear(fc_size * 4, 512)
+        self.fc1 = nn.Linear(self.num_kp * 4 , 256) # select numer of corresepondence matching point * 2 shape[0] # ========= number of kp (self.num_kp) * 4 ===========
+        #self.fc1_trasl = nn.Linear(512, 256)
+        self.fc1_trasl = nn.Linear(256, 256)
+        self.fc1_rot = nn.Linear(256, 256)
+
+        self.fc2_trasl = nn.Linear(256, 3)
+        self.fc2_rot = nn.Linear(256, 4)
+
+        self.dropout = nn.Dropout(dropout)
+
+        # for m in self.modules():
+        #     if isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d):
+        #         nn.init.kaiming_normal_(m.weight.data, mode='fan_in')
+        #         if m.bias is not None:
+        #             m.bias.data.zero_()
+
+class LCCNet_old1(nn.Module):
+    """
+    Based on the PWC-DC net. add resnet encoder, dilation convolution and densenet connections
+    """
+
+    def __init__(self, corr_net, image_size =64, use_feat_from=1, md=4, use_reflectance=False, dropout=0.0,
+                 Action_Func='leakyrelu', attention=False, res_num=50 , num_kp=500 ):
+        """
+        input: md --- maximum displacement (for correlation. default: 4), after warpping
+        """
+        super(LCCNet_old1, self).__init__()
+        self.num_kp = num_kp
+        
+        self.mono = MonoDepth() # depth estimation by monodepth2
+        # self.STN = STNNet()
+        # TODO : change correlation to correspendence Transformer algorithm
+        
+        # self.corr = build(cotr_args)
+        self.corr = build(cotr_args)
+        
+        
+        self.leakyRELU = nn.LeakyReLU(0.1)
+
+        #self.fc1 = nn.Linear(fc_size * 4, 512)
+        self.fc1_rot_aggr = nn.Linear(self.num_kp * 6 , 256) # select numer of corresepondence matching point * 2 shape[0] # ========= number of kp (self.num_kp) * 4 ===========
+        self.fc1_tarsl_aggr = nn.Linear(self.num_kp * 6 , 256) # select numer of corresepondence matching point * 2 shape[0] # ========= number of kp (self.num_kp) * 4 ===========
+        #self.fc1_trasl = nn.Linear(512, 256)
+        self.fc1_trasl = nn.Linear(256, 256)
+        self.fc1_rot = nn.Linear(256, 256)
+
+        self.fc2_trasl = nn.Linear(256, 3)
+        self.fc2_rot = nn.Linear(256, 4)
+
+        self.dropout = nn.Dropout(dropout)
+
+class LCCNet(nn.Module):
+    """
+    Based on the PWC-DC net. add resnet encoder, dilation convolution and densenet connections
+    """
+
+    def __init__(self, corr_net, image_size =64, use_feat_from=1, md=4, use_reflectance=False, dropout=0.0,
                  Action_Func='leakyrelu', attention=False, res_num=50 , num_kp=500 ):
         """
         input: md --- maximum displacement (for correlation. default: 4), after warpping
@@ -157,27 +245,29 @@ class LCCNet(nn.Module):
         # self.STN = STNNet()
         # TODO : change correlation to correspendence Transformer algorithm
         
-        self.corr = build(cotr_args)
+        # self.corr = build(cotr_args)
+        self.corr = corr_net
         
-        # TODO : load COTR pre-trained model    
-        if cotr_args.load_weights_path is not None:
-            print(f"Loading weights from {cotr_args.load_weights_path}")
-            weights = torch.load(cotr_args.load_weights_path, map_location='cuda')['model_state_dict']
-            # weights = torch.load(cotr_args.load_weights_path, map_location='gpu')['model_state_dict']
-            utils.safe_load_weights(self.corr, weights)
+        # # TODO : load COTR pre-trained model    
+        # if cotr_args.load_weights_path is not None:
+        #     print(f"Loading weights from {cotr_args.load_weights_path}")
+        #     weights = torch.load(cotr_args.load_weights_path, map_location='cuda')['model_state_dict']
+        #     # weights = torch.load(cotr_args.load_weights_path, map_location='gpu')['model_state_dict']
+        #     utils.safe_load_weights(self.corr, weights)
         
-        if cotr_args.load_weights_freeze is True:
-            print("COTR pre-trained weights freeze")
-            corr_model =self.corr.eval()
-            # for param in self.corr.parameters():
-            #     param.requires_grad = False
+        # if cotr_args.load_weights_freeze is True:
+        #     print("COTR pre-trained weights freeze")
+        #     corr_model =self.corr.eval()
+        #     # for param in self.corr.parameters():
+        #     #     param.requires_grad = False
         
         # self.corr_engine = SparseEngine(corr_model, 32, mode='tile')
         
         self.leakyRELU = nn.LeakyReLU(0.1)
 
         #self.fc1 = nn.Linear(fc_size * 4, 512)
-        self.fc1 = nn.Linear(self.num_kp * 2 , 256) # select numer of corresepondence matching point * 2 shape[0] # ========= number of kp (self.num_kp) * 4 ===========
+        self.fc1_rot_aggr = nn.Linear(self.num_kp * 6 , 256) # select numer of corresepondence matching point * 2 shape[0] # ========= number of kp (self.num_kp) * 4 ===========
+        self.fc1_tarsl_aggr = nn.Linear(self.num_kp * 6 , 256) # select numer of corresepondence matching point * 2 shape[0] # ========= number of kp (self.num_kp) * 4 ===========
         #self.fc1_trasl = nn.Linear(512, 256)
         self.fc1_trasl = nn.Linear(256, 256)
         self.fc1_rot = nn.Linear(256, 256)
@@ -187,11 +277,11 @@ class LCCNet(nn.Module):
 
         self.dropout = nn.Dropout(dropout)
 
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d):
-                nn.init.kaiming_normal_(m.weight.data, mode='fan_in')
-                if m.bias is not None:
-                    m.bias.data.zero_()
+        # for m in self.modules():
+        #     if isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d):
+        #         nn.init.kaiming_normal_(m.weight.data, mode='fan_in')
+        #         if m.bias is not None:
+        #             m.bias.data.zero_()
                     
 
     # def _make_layer(self, block, planes, blocks, stride=1):
@@ -492,16 +582,19 @@ class LCCNet(nn.Module):
         x_diff = concat_pred_corrs[:, :, 0] - concat_pred_corrs[:, :, 2]  # x - x1 차분
         y_diff = concat_pred_corrs[:, :, 1] - concat_pred_corrs[:, :, 3]  # y - y1 차분
         concat_pred_corrs_diff = torch.stack([x_diff, y_diff], dim=2)  # 차분 형태로 변환된 A (shape: (12, 100, 2))
-        
-        x = self.leakyRELU(concat_pred_corrs_diff)
+
+        concatenated_tensors = torch.cat((concat_pred_corrs, concat_pred_corrs_diff), dim=-1)  # shape (batch, 100, 6) 
+
+        x = self.leakyRELU(concatenated_tensors)
         x = x.view(x.shape[0], -1)
         x = self.dropout(x)
-        x = x.to('cuda')
-        x = x.float()
-        x = self.leakyRELU(self.fc1(x))
+        # x = x.to('cuda')
+        # x = x.float()
+        aggr_rot_x = self.leakyRELU(self.fc1_rot_aggr(x))
+        aggr_transl_x = self.leakyRELU(self.fc1_tarsl_aggr(x))
 
-        transl = self.leakyRELU(self.fc1_trasl(x))
-        rot = self.leakyRELU(self.fc1_rot(x))
+        transl = self.leakyRELU(self.fc1_trasl(aggr_transl_x))
+        rot = self.leakyRELU(self.fc1_rot(aggr_rot_x))
         transl = self.fc2_trasl(transl)
         rot = self.fc2_rot(rot)
         rot = F.normalize(rot, dim=1)
