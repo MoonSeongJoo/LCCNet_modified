@@ -55,6 +55,7 @@ warnings.filterwarnings('ignore')
 
 torch.backends.cudnn.enabled = True
 torch.backends.cudnn.benchmark = False
+print(torch.__version__)
 
 ex = Experiment("LCCNet" , interactive = True)
 ex.captured_out_filter = apply_backspaces_and_linefeeds
@@ -86,24 +87,24 @@ def config():
     checkpoints = './checkpoints/'
     dataset = 'kitti/odom' # 'kitti/raw'
     # data_folder = "/home/ubuntu/data/kitti_odometry"
-    # data_folder = "/mnt/sgvrnas/sjmoon/kitti/kitti_odometry"  # kaist gpu server 2 
+    data_folder = "/mnt/sgvrnas/sjmoon/kitti/kitti_odometry"  # kaist gpu server 2 
     # data_folder = "/mnt/data/kitti_odometry" # KAIST GPU server 1
-    data_folder = "/mnt/sjmoon/kitti/kitti_odometry"  # sapeon desktop gpu 4090
+    # data_folder = "/mnt/sjmoon/kitti/kitti_odometry"  # sapeon desktop gpu 4090
     use_reflectance = False
     val_sequence = 7
     epochs = 1000
     BASE_LEARNING_RATE = 1e-4 # 1e-4
     loss = 'combined'
-    max_t = 1.5 # 1.5, 1.0,  0.5,  0.2,  0.1
-    max_r = 20.0 # 20.0, 10.0, 5.0,  2.0,  1.0
-    batch_size = 1 # 120
+    max_t = 0.25 # 1.5, 1.0,  0.5,  0.2,  0.1
+    max_r = 10.0 # 20.0, 10.0, 5.0,  2.0,  1.0
+    batch_size = 20 # 120
     num_worker = 10
     network = 'Res_f1'
     optimizer = 'adamW'
     resume = False
     # weights = '/home/seongjoo/work/autocalib1/considering_project/checkpoints/kitti/odom/val_seq_07/models/checkpoint_r20.00_t1.50_e19_1.885.tar'
-    # weights = './checkpoints/kitti/odom/val_seq_07/models/checkpoint_r10.00_t0.25_e483_103.355.tar'
-    weights = None
+    weights = './checkpoints/kitti/odom/val_seq_07/models/checkpoint_r20.00_t1.50_e11_8.964.tar'
+    # weights = None
     rescale_rot = 1.0  #LCCNet initail value = 1.0 # value did not use
     rescale_transl = 100.0  #LCCNet initatil value = 2.0 # value did not use
     norm = 'bn'

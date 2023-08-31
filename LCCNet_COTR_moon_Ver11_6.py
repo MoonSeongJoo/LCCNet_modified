@@ -44,7 +44,7 @@ from COTR.utils import utils, debug_utils
 
 #loading Monodepth2 network model
 import monodepth2.networks
-import MonoDEVSNet.networks.networks
+import MonoDEVSNet.networks
         
 cotr_args = easydict.EasyDict({
                 "out_dir" : "general_config['out']",
@@ -124,7 +124,7 @@ class MonoDelsNet():
                                     "gan_t_decoder": "ImageDecoder"
                                 }
         #self.trainer_name = 'trainer.py'
-        self.load_weights_folder = "/home/pc-3/Downloads/AI_network/Pre-trained network/MonoDELSNet/HRNet"
+        self.load_weights_folder = "/home/seongjoo/work/autocalib/LCCNet_Moon/considering_project/MonoDEVSNet/Pre-trained_network"
         self.weights_init = "pretrained"
 
         # checking height and width are multiples of 32
@@ -136,7 +136,7 @@ class MonoDelsNet():
         self.models = {}
 
         # Encoder for (depth, segmentation, pose)
-        self.models["encoder"] = self.network_selection('encoder')
+        self.models["encoder"] = self.network_selection('depth_encoder')
         # Depth decoder
         self.models["depth_decoder"] = self.network_selection('depth_decoder')
 
@@ -155,22 +155,22 @@ class MonoDelsNet():
     
     # model_key is CaSe SenSiTivE
     def network_selection(self, model_key):
-        if model_key == 'encoder':
+        if model_key == 'depth_encoder':
             # Multiple network architectures
             if 'HRNet' in self.models_fcn_name[model_key]:
-                with open(os.path.join('configs', 'hrnet_w' + str(self.opt.num_layers) + '_vk2.yaml'), 'r') as cfg:
+                with open(os.path.join('./MonoDEVSNet/configs', 'hrnet_w' + str(self.num_layers) + '_vk2.yaml'), 'r') as cfg:
                     config = yaml.safe_load(cfg)
-                return  MonoDEVSNet.networks.networks.HRNetPyramidEncoder(config).to(self.device)
+                return  MonoDEVSNet.networks.HRNetPyramidEncoder(config).to(self.device)
             elif 'DenseNet' in self.models_fcn_name[model_key]:
-                return  MonoDEVSNet.networks.networks.DensenetPyramidEncoder(densnet_version=self.opt.num_layers).to(self.device)
+                return  MonoDEVSNet.networks.DensenetPyramidEncoder(densnet_version=self.opt.num_layers).to(self.device)
             elif 'ResNet' in self.models_fcn_name[model_key]:
-                return  MonoDEVSNet.networks.networks.ResnetEncoder(self.num_layers,
+                return  MonoDEVSNet.networks.ResnetEncoder(self.num_layers,
                                               self.weights_init == "pretrained").to(self.device)
             else:
                 raise RuntimeError('Choose a depth encoder within available scope')
 
         elif model_key == 'depth_decoder':
-            return  MonoDEVSNet.networks.networks.DepthDecoder(self.models["encoder"].num_ch_enc).to(self.device)
+            return  MonoDEVSNet.networks.DepthDecoder(self.models["encoder"].num_ch_enc).to(self.device)
 
         else:
             raise RuntimeError("Don\'t forget to mention what you want!")
@@ -364,7 +364,8 @@ class LCCNet(nn.Module):
         super(LCCNet, self).__init__()
         self.num_kp = num_kp
         
-        self.mono = MonoDepth() # depth estimation by monodepth2
+        # self.mono = MonoDepth() # depth estimation by monodepth2
+        self.mono = MonoDelsNet() # depth estimation by monodepth2
         # self.STN = STNNet()
         # TODO : change correlation to correspendence Transformer algorithm
         
@@ -525,6 +526,21 @@ class LCCNet(nn.Module):
 #         colormapped_im = (mapper.to_rgba(disp_np)[:, :, :3]).astype(np.uint8)
         return colormapped_im.transpose(2, 0, 1)
 #         return colormapped_im
+    
+    def random_mask(self, sbs_img,grid_size=(32, 32), mask_value=0):
+        # sbs_img shape: [batch, channel, height, width]
+        batch_size, _, height, width = sbs_img.shape
+        mask = torch.ones_like(sbs_img)
+
+        grid_height, grid_width = grid_size
+
+        for i in range(height // grid_height):
+            for j in range(width // grid_width):
+                if torch.rand(1) > 0.75:  # Randomly choose whether to mask this grid or not
+                    # Apply the mask to the corresponding area in the image
+                    mask[:, :, i*grid_height:(i+1)*grid_height,j*grid_width:(j+1)*grid_width] = mask_value
+
+        return sbs_img * mask
 
     def forward(self, rgb_input, depth_input , query_input ,corr_target):
 #         print ("------- monodepth2 input information--------" )
@@ -542,8 +558,8 @@ class LCCNet(nn.Module):
         rgb_pred_input = []        
         
         with torch.no_grad():
-            rgb_features = self.mono.encoder(rgb_input)
-            rgb_outputs  = self.mono.depth_decoder(rgb_features)
+            rgb_features, _ = self.mono.models["encoder"](rgb_input)
+            rgb_outputs  = self.mono.models["depth_decoder"](rgb_features)
             
         rgb_depth_pred = rgb_outputs[("disp", 0)]
         
@@ -596,19 +612,21 @@ class LCCNet(nn.Module):
         sbs_img = tvtf.normalize(sbs_img, (0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
 
 
-        ########## transformer source image masking #################
-        masked_img = sbs_img.clone()
-        # 마스킹할 픽셀의 비율을 정의합니다. 여기서는 전체 픽셀 중 약 10%를 마스킹하도록 설정합니다.
-        mask_ratio = 0.75
-        # 이미지와 동일한 크기의 랜덤한 텐서를 생성합니다.
-        random_tensor = torch.rand_like(sbs_img)
-        # 생성된 랜덤 텐서에서 mask_ratio보다 작은 값들에 대한 마스크를 만듭니다.
-        mask = random_tensor < mask_ratio
-        # 원본 이미지에서 해당 마스크 위치의 픽셀 값을 0으로 설정합니다.
-        masked_img[mask] = 0
+        # ########## transformer source image masking 1*1 pixel#################
+        # masked_img = sbs_img.clone()
+        # # 마스킹할 픽셀의 비율을 정의합니다. 여기서는 전체 픽셀 중 약 10%를 마스킹하도록 설정합니다.
+        # mask_ratio = 0.75
+        # # 이미지와 동일한 크기의 랜덤한 텐서를 생성합니다.
+        # random_tensor = torch.rand_like(sbs_img)
+        # # 생성된 랜덤 텐서에서 mask_ratio보다 작은 값들에 대한 마스크를 만듭니다.
+        # mask = random_tensor < mask_ratio
+        # # 원본 이미지에서 해당 마스크 위치의 픽셀 값을 0으로 설정합니다.
+        # masked_img[mask] = 0
+
+        sbs_img_masked = self.random_mask(sbs_img)
 
         # img_input =  sbs_img.cuda().type(torch.float32)
-        img_input =  masked_img.cuda().type(torch.float32)
+        img_input =  sbs_img_masked.cuda().type(torch.float32)
         # rgb_pred_input = rgb_pred_input.cuda()
         query_input[:,:,0] = query_input[:,:,0]/2    # recaling points for sbs image resizing
         query_input[:,:,1] = query_input[:,:,1]/2 
