@@ -162,15 +162,15 @@ def knn(x, y ,k):
             
   
     #### 유사한 포인트 뽑기 using KNN #####
-    # pairwise_distance = F.pairwise_distance(x2, y2)
-    # idx = pairwise_distance.topk(k=k, dim=-1)[1]   # (batch_size, num_points, k)
+    pairwise_distance = F.pairwise_distance(x2, y2)
+    idx = pairwise_distance.topk(k=k, dim=-1)[1]   # (batch_size, num_points, k)
     # top_indices = torch.topk(pairwise_distance.flatten(), k=k, largest=False)
     # top_indices = top_indices.indices
     # indices = np.unravel_index(top_indices, pairwise_distance.shape)
     # top_indices = np.asarray(top_indices).T
     
     #### 가장 먼 포인트 들 뽑기 #########
-    idx ,_ = farthest_point_sampling(x2,k)
+    # idx ,_ = farthest_point_sampling(x2,k)
 
     top_x = x2[idx]
     top_y = y2[idx]

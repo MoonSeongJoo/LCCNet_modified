@@ -126,7 +126,8 @@ class MonoDelsNet():
                                 }
         #self.trainer_name = 'trainer.py'
         # self.load_weights_folder = "/home/seongjoo/work/autocalib/LCCNet_Moon/considering_project/MonoDEVSNet/Pre-trained_network" # kaist gpu server2 251
-        self.load_weights_folder = "/home/pc-3/work/autocalib/considering_project/MonoDEVSNet/Pre-trained_network" # sapeon workstation
+        # self.load_weights_folder = "/home/pc-3/work/autocalib/considering_project/MonoDEVSNet/Pre-trained_network" # sapeon workstation
+        self.load_weights_folder = "/home/sjmoon/work/autocalib1/considering_project/MonoDEVSNet/Pre-trained_network"
         self.weights_init = "pretrained"
 
         # checking height and width are multiples of 32
@@ -264,6 +265,29 @@ class regressor(nn.Module) :
         self.dropout1 = nn.Dropout(0.1)
         self.dropout2 = nn.Dropout(0.5)
 
+
+class COTR(nn.Module):
+    
+    def __init__(self, num_kp=500):
+        super(COTR, self).__init__()
+        self.num_kp = num_kp
+        ##### CORR network #######
+        self.corr = build(cotr_args)
+    
+    def forward(self, sbs_img , query_input):
+        
+        corrs_pred = self.corr(sbs_img, query_input)['pred_corrs']
+        
+        img_reverse_input = torch.cat([sbs_img[..., 640:], sbs_img[..., :640]], axis=-1)
+        ##cyclic loss pre-processing
+        query_reverse = corrs_pred
+        query_reverse[..., 0] = query_reverse[..., 0] - 0.5
+        cycle = self.corr(img_reverse_input, query_reverse)['pred_corrs']
+        cycle[..., 0] = cycle[..., 0] - 0.5
+        mask = torch.norm(cycle - query_input, dim=-1) < 10 / 640
+
+        return corrs_pred , cycle , mask
+
 # Calibration action prediction part
 class CalibActionHead(nn.Module):
     def __init__(self):
@@ -301,40 +325,17 @@ class CalibActionHead(nn.Module):
         
         return action_mean, (h_n, c_n)
 
-
-class COTR(nn.Module):
-    
-    def __init__(self, num_kp=500):
-        super(COTR, self).__init__()
-        self.num_kp = num_kp
-        ##### CORR network #######
-        self.corr = build(cotr_args)
-    
-    def forward(self, sbs_img , query_input):
-        
-        corrs_pred = self.corr(sbs_img, query_input)['pred_corrs']
-        
-        img_reverse_input = torch.cat([sbs_img[..., 640:], sbs_img[..., :640]], axis=-1)
-        ##cyclic loss pre-processing
-        query_reverse = corrs_pred
-        query_reverse[..., 0] = query_reverse[..., 0] - 0.5
-        cycle = self.corr(img_reverse_input, query_reverse)['pred_corrs']
-        cycle[..., 0] = cycle[..., 0] - 0.5
-        mask = torch.norm(cycle - query_input, dim=-1) < 10 / 640
-
-        return corrs_pred , cycle , mask
-
 class GenerateSeq(nn.Module):
     """
         에이전트 네트워크를 기반으로 고정 길이 교정 작업 시퀀스 생성
     """
-    def __init__(self):
+    def __init__(self, model):
         super(GenerateSeq, self).__init__()
-        # self.agent = agent
+        self.agent = model
     
-    def forward(self, agent,ds_pc_source,corr_feature, pos_src, pos_tgt):
+    def forward(self,ds_pc_source,corr_feature, pos_src, pos_tgt):
         batch_size = ds_pc_source.shape[0]
-        trg_seqlen = 2
+        trg_seqlen = 3
 
         # 출력 결과 초기화
         outputs_save_transl=torch.zeros(batch_size,trg_seqlen,3)
@@ -348,15 +349,15 @@ class GenerateSeq(nn.Module):
         # 액션 시퀀스 생성
         for i in range(0, trg_seqlen):
             # 전문가의 움직임
-            expert_action = env.expert_step_real(exp_pos_src, pos_tgt)
+            expert_action = env.expert_step_real(exp_pos_src.detach(), pos_tgt.detach())
             # 에이전트 작업
-            actions, hc = agent(corr_feature , h_last, c_last)
-            h_last, c_last = hc[0], hc[1]
-            action_t, action_r = actions[0].unsqueeze(1), actions[1].unsqueeze(1)
-            action_tr = torch.cat([action_t, action_r], dim = 1)
+            actions, hc = self.agent(corr_feature.detach() , h_last.detach(), c_last.detach())
+            h_last, c_last = hc[0].detach(), hc[1].detach()
+            action_t, action_r = actions[0].unsqueeze(1).detach(), actions[1].unsqueeze(1).detach()
+            action_tr = torch.cat([action_t, action_r], dim = 1).detach()
             # 다음 단계 상태
-            new_source, pos_src = env.step_continous(ds_pc_source, action_tr, pos_src) # new_source는 현재 포인트 클라우드를 기록하는 데만 사용되며 입력 포인트 클라우드(apply_trafo에 의해 결정됨)를 반복적으로 업데이트하지 않습니다.
-            _ , exp_pos_src = env.step_continous(ds_pc_source, expert_action, exp_pos_src)
+            new_source, pos_src = env.step_continous(ds_pc_source.detach(), action_tr, pos_src.detach()) # new_source는 현재 포인트 클라우드를 기록하는 데만 사용되며 입력 포인트 클라우드(apply_trafo에 의해 결정됨)를 반복적으로 업데이트하지 않습니다.
+            _ , exp_pos_src = env.step_continous(ds_pc_source.detach(), expert_action, exp_pos_src)
             # 상태 업데이트
             current_source = new_source
             # depth = lidar_project_depth_batch(current_source, calib, (384, 1280))  # 업데이트된 포인트 클라우드에 해당하는 배치의 깊이 맵
@@ -385,7 +386,7 @@ class DepthCalibTranformer(nn.Module):
         # self.regressor = regressor(dropout=0.0, num_kp=self.num_kp) # FC regressor
         self.regressor = CalibActionHead() # LSTM regressor
 
-        self.calib_seq = GenerateSeq()
+        self.calib_seq = GenerateSeq(self.regressor)
 
     def forward(self, ds_pc_source, sbs_img , query_input , pos_src, pos_tgt):
 #         print ("------- monodepth2 input information--------" )
@@ -460,7 +461,7 @@ class DepthCalibTranformer(nn.Module):
         # rot = self.regressor.fc2_rot(rot)
         # rot = F.normalize(rot, dim=1)
         
-        exp_transl_seq, exp_rot_seq, transl_seq, rot_seq, pos_final, current_source = self.calib_seq (self.regressor , ds_pc_source, feature_emb, pos_src, pos_tgt)
+        exp_transl_seq, exp_rot_seq, transl_seq, rot_seq, pos_final, current_source = self.calib_seq (ds_pc_source, feature_emb, pos_src, pos_tgt)
         
         return corrs_pred , cycle , mask ,exp_transl_seq, exp_rot_seq, transl_seq, rot_seq, pos_final, current_source 
             

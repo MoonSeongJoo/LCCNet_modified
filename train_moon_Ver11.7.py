@@ -4,7 +4,6 @@
 
 # In[1]:
 
-
 # -------------------------------------------------------------------
 # Copyright (C) 2020 Harbin Institute of Technology, China
 # Author: Xudong Lv (15B901019@hit.edu.cn)
@@ -89,10 +88,10 @@ poses_path = "data_odometry_poses"
 def config():
     checkpoints = './checkpoints/'
     dataset = 'kitti/odom' # 'kitti/raw'
-    # data_folder = "/home/ubuntu/data/kitti_odometry"
+    data_folder = "/data/kitti/kitti_odometry"
     # data_folder = "/mnt/sgvrnas/sjmoon/kitti/kitti_odometry"  # kaist gpu server 2 
     # data_folder = "/mnt/data/kitti_odometry" # KAIST GPU server 1
-    data_folder = "/mnt/sjmoon/kitti/kitti_odometry"  # sapeon desktop gpu 4090
+    # data_folder = "/mnt/sjmoon/kitti/kitti_odometry"  # sapeon desktop gpu 4090
     use_reflectance = False
     val_sequence = 7
     epochs = 1000
@@ -105,8 +104,8 @@ def config():
     network = 'Res_f1'
     optimizer = 'adamW'
     resume = False
-    # weights = '/home/seongjoo/work/autocalib1/considering_project/checkpoints/kitti/odom/val_seq_07/models/checkpoint_r20.00_t1.50_e19_1.885.tar'
-    # weights = './checkpoints/kitti/odom/val_seq_07/models/checkpoint_r20.00_t1.50_e11_8.964.tar'
+    weights = '/home/seongjoo/work/autocalib1/considering_project/checkpoints/kitti/odom/val_seq_07/models/checkpoint_r20.00_t1.50_e19_1.885.tar'
+    # weights = './checkpoints/kitti/odom/val_seq_07/models/checkpoint_r10.00_t0.25_e1_1.666.tar'
     weights = None
     rescale_rot = 1.0  #LCCNet initail value = 1.0 # value did not use
     rescale_transl = 100.0  #LCCNet initatil value = 2.0 # value did not use
@@ -129,7 +128,8 @@ def config():
     all_net_init = None
 
 # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-os.environ["CUDA_VISIBLE_DEVICES"] = '0'
+os.environ["CUDA_VISIBLE_DEVICES"] = '1'
+device='cuda'
 
 EPOCH = 1
 def _init_fn(worker_id, seed):
@@ -178,8 +178,10 @@ def train(model, optimizer, sbs_img , corrs ,loss_fn, ds_pc_target_input, ds_pc_
     queries     = corrs[:, :, :3]
     corr_target = corrs[:, :, 3:]
     
-    queries     = queries.cuda().type(torch.float32)
-    corr_target = corr_target.cuda().type(torch.float32)
+    # queries     = queries.cuda().type(torch.float32)
+    # corr_target = corr_target.cuda().type(torch.float32)
+    # queries     = queries.to(device)
+    # corr_target = corr_target.to(device)
 
     # Run model
     #transl_err, rot_err = model(rgb_img, refl_img)
@@ -209,37 +211,35 @@ def train(model, optimizer, sbs_img , corrs ,loss_fn, ds_pc_target_input, ds_pc_
 
 # CNN test
 @ex.capture
-def val(model, calib_seq, rgb_input, dense_depth_input ,corrs ,target_transl, target_rot, loss_fn, ds_pc_target_input, ds_pc_source_input,calib, pose_source, pose_target,point_clouds, loss):
+def val(model, sbs_img , corrs ,loss_fn, ds_pc_target_input, ds_pc_source_input, pose_source, pose_target, loss):
+    
     model.eval()
 
     queries     = corrs[:, :, :3]
     corr_target = corrs[:, :, 3:]
 
-    queries     = queries.cuda().type(torch.float32)
-    corr_target = corr_target.cuda().type(torch.float32)
-    seq_num = 3
     
     # Run model
     with torch.no_grad():
         #transl_err, rot_err = model(rgb_img, refl_img)
-        transl_err, rot_err,corr_pred ,cycle , mask = model(rgb_input,dense_depth_input, queries ,corr_target)
-
+        corrs_pred , cycle , mask ,exp_transl_seq, exp_rot_seq, transl_seq, rot_seq, pos_final, current_source = model(ds_pc_source_input, sbs_img, queries , pose_source, pose_target)
+    
     if loss == 'points_distance' or loss == 'combined':
-        losses = loss_fn(point_clouds, target_transl, target_rot, transl_err, rot_err, corr_target , corr_pred ,queries ,cycle, mask)
+        losses = loss_fn(ds_pc_target_input, current_source,exp_transl_seq, exp_rot_seq, transl_seq, rot_seq , corr_target , corrs_pred , queries ,cycle, mask, pos_final, pose_target)
     else:
-        losses = loss_fn(target_transl, target_rot, transl_err, rot_err)
+        losses = loss_fn(exp_transl_seq, exp_rot_seq, transl_seq, rot_seq)
 
     # if loss != 'points_distance':
     #     total_loss = loss_fn(target_transl, target_rot, transl_err, rot_err)
     # else:
     #     total_loss = loss_fn(point_clouds, target_transl, target_rot, transl_err, rot_err)
 
-    total_trasl_error = torch.tensor(0.0).cuda()
-    target_transl = torch.tensor(target_transl).cuda()
-    total_rot_error = quaternion_distance(target_rot, rot_err, target_rot.device)
-    total_rot_error = total_rot_error * 180. / math.pi
-    for j in range(rgb_input.shape[0]):
-        total_trasl_error += torch.norm(target_transl[j] - transl_err[j]) * 100.
+    # total_trasl_error = torch.tensor(0.0).cuda()
+    # target_transl = torch.tensor(target_transl).cuda()
+    # total_rot_error = quaternion_distance(exp_rot_seq, rot_seq, exp_rot_seq.device)
+    # total_rot_error = total_rot_error * 180. / math.pi
+    # for j in range(sbs_img.shape[0]):
+    #     total_trasl_error += torch.norm(exp_transl_seq[j] - transl_seq[j]) * 100.
 
     # # output image: The overlay image of the input rgb image and the projected lidar pointcloud depth image
     # cam_intrinsic = camera_model[0]
@@ -249,7 +249,7 @@ def val(model, calib_seq, rgb_input, dense_depth_input ,corrs ,target_transl, ta
     # RT_predicted = torch.mm(T_predicted, R_predicted)
     # rotated_point_cloud = rotate_forward(rotated_point_cloud, RT_predicted)
 
-    return losses, total_trasl_error.item(), total_rot_error.sum().item(), rot_err, transl_err
+    return losses
 #     return losses, total_trasl_error.item(), rot_err, transl_err
 
 
@@ -531,7 +531,7 @@ def main(_config, _run, seed):
     
     ########### parallel gpu loding ###########
     model = nn.DataParallel(model)
-    model = model.cuda()
+    model = model.to(device)
     
     print('Number of model parameters: {}'.format(sum([p.data.nelement() for p in model.parameters()])))
 
@@ -584,6 +584,7 @@ def main(_config, _run, seed):
         sum_corr_loss = 0. 
         sum_point_loss = 0. 
         sum_trans_loss = 0.
+        sum_tmae_loss = 0.
         sum_rot_loss = 0.
         sum_pose_loss = 0.
         
@@ -591,6 +592,7 @@ def main(_config, _run, seed):
         local_corr_loss = 0.
         local_rot_loss = 0.
         local_trans_loss = 0.
+        local_tmae_loss = 0.
         local_pcl_loss = 0. 
         local_pose_loss = 0.
         
@@ -618,11 +620,7 @@ def main(_config, _run, seed):
             start_time = time.time()
             lidar_projetion_input = []
             rgb_input = []
-            # lidar_gt = []
-            # shape_pad_input = []
-            real_shape_input = []
             corrs_input =[]
-            # calib_input = []
             ds_pc_target_input = []
             ds_pc_source_input = []
             rgbdepth_pred_input = []     
@@ -632,8 +630,8 @@ def main(_config, _run, seed):
             # sample['rot_error'] = sample['rot_error'].cuda()
             
             # pose data
-            pose_target = sample['pose_target'].cuda()
-            pose_source = sample['pose_source'].cuda()
+            pose_target = sample['pose_target'].to(device)
+            pose_source = sample['pose_source'].to(device)
             
             start_preprocess = time.time()
             for idx in range(len(sample['rgb'])):
@@ -642,12 +640,12 @@ def main(_config, _run, seed):
                 rgb = sample['rgb'][idx]
                 # rgb = cv2.resize(rgb, (640,192), interpolation=cv2.INTER_LINEAR)
                 # rgb = transforms.ToTensor()(rgb)
-                rgb = transforms.ToTensor()(rgb).cuda()
+                rgb = transforms.ToTensor()(rgb).to(device)
                 # calib = sample['calib'][idx].cuda()
                 
                 #calibrated point cloud 2d projection
                 # pc_lidar = sample['point_cloud'][idx].clone()
-                pc_lidar = sample['point_cloud'][idx].cuda()
+                pc_lidar = sample['point_cloud'][idx].to(device)
                 if _config['max_depth'] < 80.:
                     pc_lidar = pc_lidar[:, pc_lidar[0, :] < _config['max_depth']].clone()
                 
@@ -744,26 +742,21 @@ def main(_config, _run, seed):
             sbs_img = torch.from_numpy(sbs_img).permute(0,3,1,2).cuda()
             sbs_img = tvtf.normalize(sbs_img, (0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
             
+            sbs_img_masked = random_mask(sbs_img)
+            
             # ####### display input signal #########        
             # plt.figure(figsize=(10, 10))
             # plt.subplot(211)
-            # plt.imshow(torchvision.utils.make_grid(rgb_input).permute(1,2,0).cpu().numpy())
+            # plt.imshow(torchvision.utils.make_grid(sbs_img).permute(1,2,0).cpu().numpy())
             # plt.title("RGB_input", fontsize=22)
             # plt.axis('off')
 
             # plt.subplot(212)
-            # plt.imshow(torchvision.utils.make_grid(lidar_input).permute(1,2,0).cpu().numpy() , cmap='magma')
+            # plt.imshow(torchvision.utils.make_grid(sbs_img_masked).permute(1,2,0).cpu().numpy() , cmap='magma')
             # plt.title("dense_depth_input", fontsize=22)
             # plt.axis('off')        
             # ############# end of display input signal ###################
 
-
-            sbs_img_masked = random_mask(sbs_img)
-   
-            # img_input =  sbs_img.cuda().type(torch.float32)
-            # img_input =  sbs_img_masked.cuda().type(torch.float32)
-            img_input =  sbs_img_masked
-            # rgb_pred_input = rgb_pred_input.cuda()
             corrs_input[:,:,0] = corrs_input[:,:,0]/2    # recaling points for sbs image resizing
             corrs_input[:,:,1] = corrs_input[:,:,1]/2 
             corrs_input[:,:,0] = corrs_input[:,:,3]/2 + 0.5 # recaling points for sbs image resizing
@@ -771,15 +764,16 @@ def main(_config, _run, seed):
             
             end_preprocess = time.time()
 
-            loss = train(model, optimizer, img_input , corrs_input ,loss_fn, ds_pc_target_input, ds_pc_source_input,pose_source, pose_target,_config['loss'])
+            loss = train(model, optimizer, sbs_img_masked , corrs_input ,loss_fn, ds_pc_target_input, ds_pc_source_input,pose_source, pose_target,_config['loss'])
         
             if _config['loss'] == 'points_distance' or _config['loss'] == 'combined':
                 local_loss += loss['total_loss'].item()
                 local_corr_loss += loss['corr_loss'].item()
                 local_pcl_loss += loss['point_clouds_loss'].item()
                 local_rot_loss += loss['loss_rot'].item()
-                local_trans_loss += loss['loss_t_mae'].item()
-                local_pose_loss += loss['loss_t_mae'].item()
+                local_trans_loss += loss['loss_trans'].item()
+                local_tmae_loss += loss['loss_t_mae'].item()
+                local_pose_loss += loss['clone_loss'].item()
        
             else :
                 local_loss += loss.item()
@@ -789,6 +783,7 @@ def main(_config, _run, seed):
             train_pcl_loss = local_pcl_loss/50
             train_rot_loss = local_rot_loss/50
             train_trans_loss =local_trans_loss/50
+            train_tmae_loss = local_tmae_loss/50
             train_pose_loss =local_pose_loss/50
    
 
@@ -850,12 +845,13 @@ def main(_config, _run, seed):
             
             if batch_idx % 50 == 0 and batch_idx != 0:
 
-                print(f'Iter {batch_idx}/{len(TrainImgLoader)} training loss = {train_local_loss:.6f}, '
+                print(f'Iter {batch_idx}/{len(TrainImgLoader)} training loss = {train_local_loss:.4f}, '
                       f'loss of corr = {train_corr_loss:.6f} ,'
-                      f'loss of pcl = {train_pcl_loss:.6f} ,'
-                      f'loss of rot = {train_rot_loss:.6f} ,'
+                      f'loss of pcl = {train_pcl_loss:.4f} ,'
+                      f'loss of rot = {train_rot_loss:.4f} ,'
                       f'loss of trans = {train_trans_loss:.6f} ,'
-                      f'loss of pose = {train_pose_loss:.6f} ,'
+                      f'loss of tmae = {train_tmae_loss:.6f} ,'
+                      f'loss of clone = {train_pose_loss:.6f} ,'
                       f'time = {(time.time() - start_time)/rgb_input.shape[0]:.4f}, '
                     #   f'time_preprocess = {(end_preprocess-start_preprocess)/rgb_input.shape[0]:.4f}, '
                       f'time for 50 iter: {time.time()-time_for_50ep:.4f} ')
@@ -867,6 +863,7 @@ def main(_config, _run, seed):
                 local_pcl_loss = 0.
                 local_rot_loss = 0.
                 local_trans_loss = 0.
+                local_tmae_loss = 0.
                 local_pose_loss = 0.
                 # #train_loss = train_local_loss / len(dataset_train)
                 # ######### save network model for intermediate verification #####################  
@@ -900,7 +897,8 @@ def main(_config, _run, seed):
                 sum_corr_loss += loss['corr_loss'].item() * len(sample['rgb'])
                 sum_point_loss += loss['point_clouds_loss'].item() * len(sample['rgb'])
                 sum_rot_loss += loss['loss_rot'] * len(sample['rgb'])
-                sum_trans_loss += loss['loss_t_mae'].item() * len(sample['rgb'])
+                sum_trans_loss += loss['loss_trans'] * len(sample['rgb'])
+                sum_tmae_loss += loss['loss_t_mae'].item() * len(sample['rgb'])
                 sum_pose_loss += loss['clone_loss'].item() * len(sample['rgb'])
 
             else : 
@@ -914,7 +912,8 @@ def main(_config, _run, seed):
         print('epoch %d total point loss = %.4f' % (epoch, sum_point_loss / len(dataset_train)))
         print('epoch %d total trans loss = %.4f' % (epoch, sum_trans_loss / len(dataset_train)))
         print('epoch %d total rot loss = %.4f' % (epoch, sum_rot_loss / len(dataset_train)))
-        print('epoch %d total pose loss = %.4f' % (epoch, sum_pose_loss / len(dataset_train)))
+        print('epoch %d total tmae loss = %.4f' % (epoch, sum_tmae_loss / len(dataset_train)))
+        print('epoch %d total clone loss = %.4f' % (epoch, sum_pose_loss / len(dataset_train)))
         print('Total epoch time = %.2f' % (time.time() - epoch_start_time))
         print("------------------------------------")
         _run.log_scalar("Total training loss", total_train_loss / len(dataset_train), epoch)
@@ -927,7 +926,8 @@ def main(_config, _run, seed):
             train_writer.add_scalar("Loss_Rotation", sum_rot_loss /len(dataset_train), epoch)
         else : 
             train_writer.add_scalar("Loss_Total", loss.item(), train_iter)
-        torch.cuda.empty_cache()
+        
+        # torch.cuda.empty_cache()
         
         ## Validation ##
         total_val_loss = 0.
@@ -940,27 +940,32 @@ def main(_config, _run, seed):
             print(f'batch {batch_idx+1}/{len(ValImgLoader)}', end='\r')
             start_time = time.time()
             
-            lidar_input = []
             rgb_input = []
             # lidar_gt = []
-            shape_pad_input = []
-            real_shape_input = []
-            pc_rotated_input = []
+            lidar_projetion_input =[]
+      
             corrs_input =[]
-            
-            # gt pose
-            sample['tr_error'] = sample['tr_error'].cuda()
-            sample['rot_error'] = sample['rot_error'].cuda()
+            ds_pc_source_input =[]
+            ds_pc_target_input =[]
+            rgbdepth_pred_input =[]
+           
+            # # gt pose
+            # sample['tr_error'] = sample['tr_error'].cuda()
+            # sample['rot_error'] = sample['rot_error'].cuda()
+
+            # pose data
+            pose_target = sample['pose_target'].to(device)
+            pose_source = sample['pose_source'].to(device)
 
             for idx in range(len(sample['rgb'])):
                 real_shape = [sample['rgb'][idx].shape[0], sample['rgb'][idx].shape[1], sample['rgb'][idx].shape[2]]
                 
                 rgb = sample['rgb'][idx]
-                rgb = transforms.ToTensor()(rgb).cuda()
-                pc_org = sample['point_cloud'][idx].cuda()
+                rgb = transforms.ToTensor()(rgb).to(device)
+                # pc_org = sample['point_cloud'][idx].cuda()
                 
                 #calibrated point cloud 2d projection
-                pc_lidar = pc_org.clone().cuda()
+                pc_lidar = sample['point_cloud'][idx].to(device)
                 if _config['max_depth'] < 80.:
                     pc_lidar = pc_lidar[:, pc_lidar[0, :] < _config['max_depth']].clone()
                 
@@ -973,13 +978,17 @@ def main(_config, _run, seed):
                 T = mathutils.Matrix.Translation(sample['tr_error'][idx])
                 RT = T @ R
 
-                pc_rotated = rotate_back(sample['point_cloud'][idx].cuda(), RT) # Pc` = RT * Pc
+                pc_rotated = rotate_back(pc_lidar, RT) # Pc` = RT * Pc
                 if _config['max_depth'] < 80.:
                     pc_rotated = pc_rotated[:, pc_rotated[0, :] < _config['max_depth']].clone()
                 
                 depth_img, uv , z,  points_index = lidar_project_depth(pc_rotated, sample['calib'][idx], real_shape) # image_shape
                 depth_img /= _config['max_depth']
-
+                
+                # resampling point cloud
+                resample_pcl_rotate = resample(pc_rotated,10000)
+                resample_pcl_origin = resample(pc_lidar,10000)
+                
                 # lidarOnImage = np.hstack([uv, z])
                 lidarOnImage = torch.cat((uv, z), dim=1)
                 dense_depth_img = dense_map(lidarOnImage.T , real_shape[1], real_shape[0] , _config['dense_resoltuion']) # argument = (lidarOnImage.T , 1241, 376 , 8)
@@ -996,8 +1005,8 @@ def main(_config, _run, seed):
 
                 rgb = F.pad(rgb, shape_pad)
                 # depth_img = F.pad(depth_img, shape_pad).cuda()
-                depth_gt = F.pad(depth_gt, shape_pad).cuda()
-                dense_depth_img_color = F.pad(dense_depth_img_color, shape_pad).cuda()
+                depth_gt = F.pad(depth_gt, shape_pad)
+                dense_depth_img_color = F.pad(dense_depth_img_color, shape_pad)
                 
                 # corr dataset generation 
                 # corrs = corr_gen(gt_points_index, points_index , gt_uv, uv , _config["num_kp"])
@@ -1009,39 +1018,65 @@ def main(_config, _run, seed):
                 
                 # batch stack 
                 rgb_input.append(rgb)
-                lidar_input.append(dense_depth_img_color)
-                # lidar_gt.append(depth_gt)
-                real_shape_input.append(real_shape)
-                shape_pad_input.append(shape_pad)
-                pc_rotated_input.append(pc_rotated)
-                corrs_input.append(corrs)           
+                lidar_projetion_input.append(dense_depth_img_color)
+                ds_pc_source_input.append(resample_pcl_rotate)
+                ds_pc_target_input.append(resample_pcl_origin)
+                corrs_input.append(corrs)       
             
-            lidar_input = torch.stack(lidar_input) 
             rgb_input = torch.stack(rgb_input) 
+            lidar_projetion_input = torch.stack(lidar_projetion_input) 
             rgb_input = F.interpolate(rgb_input, size=[192, 640], mode="bilinear") # lidar 2d depth map input [256,512,1]
-            lidar_input = F.interpolate(lidar_input, size=[192, 640], mode="bilinear") # camera input = [256,512,3]
-            # lidar_input = torch.cat((lidar_input,lidar_input,lidar_input), 1)
+            lidar_projetion_input = F.interpolate(lidar_projetion_input, size=[192, 640], mode="bilinear") # camera input = [256,512,3]
             corrs_input = torch.stack(corrs_input)
+            ds_pc_source_input = torch.stack(ds_pc_source_input)
+            ds_pc_target_input = torch.stack(ds_pc_target_input)  
             
-            # ####### display input signal #########        
+            ############ rgb mono depth prediction ##############  
+            with torch.no_grad():
+                rgb_features, _ = MonoDelsNet_model.models["encoder"](rgb_input) # for monodelvsnet 
+                rgb_outputs  = MonoDelsNet_model.models["depth_decoder"](rgb_features) # for monodelvsnet
+                # rgb_features = self.mono.encoder(rgb_input) # for monodepth2
+                # rgb_outputs  = self.mono.depth_decoder(rgb_features) # for monodepth2
+                
+            rgb_depth_pred = rgb_outputs[("disp", 0)]
+            
+            for idx in range(len(rgb_depth_pred)):
+                rgb_pred = rgb_depth_pred[idx].squeeze(0)
+                rgb_pred = colormap(rgb_pred)
+                # batch stack 
+                rgbdepth_pred_input.append(rgb_pred)
+            
+            rgbdepth_pred_input = torch.stack(rgbdepth_pred_input)
+
+            rgbdepth_pred_input = rgbdepth_pred_input.permute(0,2,3,1)
+            lidar_projetion_input = lidar_projetion_input.permute(0,2,3,1)
+
+            sbs_img = two_images_side_by_side(rgbdepth_pred_input, lidar_projetion_input)
+            sbs_img = torch.from_numpy(sbs_img).permute(0,3,1,2).cuda()
+            sbs_img = tvtf.normalize(sbs_img, (0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
+            
+            sbs_img_masked = random_mask(sbs_img)
+
+            # ######## display input signal #########        
             # plt.figure(figsize=(10, 10))
             # plt.subplot(211)
-            # plt.imshow(torchvision.utils.make_grid(rgb_input).permute(1,2,0).cpu().numpy())
+            # plt.imshow(torchvision.utils.make_grid(sbs_img).permute(1,2,0).cpu().numpy())
             # plt.title("RGB_input", fontsize=22)
             # plt.axis('off')
 
             # plt.subplot(212)
-            # plt.imshow(torchvision.utils.make_grid(lidar_input).permute(1,2,0).cpu().numpy() , cmap='magma')
+            # plt.imshow(torchvision.utils.make_grid(sbs_img_masked).permute(1,2,0).cpu().numpy() , cmap='magma')
             # plt.title("dense_depth_input", fontsize=22)
             # plt.axis('off')        
             # ############# end of display input signal ###################
-                        
-            loss, trasl_e, rot_e, R_predicted,  T_predicted = val(model, rgb_input, lidar_input, corrs_input ,
-                                                                  sample['tr_error'], sample['rot_error'],
-                                                                  loss_fn, sample['point_cloud'], _config['loss'])
+            
+            corrs_input[:,:,0] = corrs_input[:,:,0]/2    # recaling points for sbs image resizing
+            corrs_input[:,:,1] = corrs_input[:,:,1]/2 
+            corrs_input[:,:,0] = corrs_input[:,:,3]/2 + 0.5 # recaling points for sbs image resizing
+            corrs_input[:,:,1] = corrs_input[:,:,4]/2 
 
-            total_val_t += trasl_e
-            total_val_r += rot_e
+            loss = val(model, sbs_img_masked , corrs_input ,loss_fn, ds_pc_target_input, ds_pc_source_input,pose_source, pose_target,_config['loss'])
+                        
             if _config['loss'] == 'points_distance' or _config['loss'] == 'combined':
                 local_loss += loss['total_loss'].item()
             else : 
@@ -1064,6 +1099,8 @@ def main(_config, _run, seed):
             
             if _config['loss'] == 'points_distance' or _config['loss'] == 'combined':
                 total_val_loss += loss['total_loss'].item() * len(sample['rgb'])
+                total_val_r += loss['loss_rot'].item() * len(sample['rgb'])
+                total_val_t += loss['loss_t_mae'].item() * len(sample['rgb'])
             
             else : 
                 total_val_loss += loss.item() * len(sample['rgb'])
@@ -1072,7 +1109,7 @@ def main(_config, _run, seed):
 
         print("------------------------------------")
         print('total val loss = %.3f' % (total_val_loss / len(dataset_val)))
-        print(f'total traslation error: {total_val_t / len(dataset_val)} cm')
+        print(f'total traslation error: {total_val_t / len(dataset_val) * 100 } cm')
         print(f'total rotation error: {total_val_r / len(dataset_val)} °')
         print("------------------------------------")
 
@@ -1085,11 +1122,9 @@ def main(_config, _run, seed):
             val_writer.add_scalar("Loss_Rotation", total_val_r / len(dataset_val), epoch)
             val_writer.add_scalar("Total_Loss", total_val_loss / len(dataset_val), epoch)
         else : 
-            val_writer.add_scalar("Loss_Translation", trasl_e, val_iter)
-            val_writer.add_scalar("Loss_Rotation", rot_e, val_iter)
             val_writer.add_scalar("Total_Loss", loss['total_loss'].item(), val_iter)
-
-   
+        
+        # torch.cuda.empty_cache()
      # SAVE
         val_loss = total_val_loss / len(dataset_val)
         if epoch % 1 == 0 :
@@ -1116,13 +1151,13 @@ def main(_config, _run, seed):
                 if os.path.exists(old_save_filename):
                     os.remove(old_save_filename)
             old_save_filename = savefilename
-
+    
+    #torch.cuda.empty_cache()
     print('full training time = %.2f HR' % ((time.time() - start_full_time) / 3600))
     return _run.result
 
 
 # In[6]:
-
 
 ex.run()
 

@@ -114,11 +114,11 @@ class CombinedLoss(nn.Module):
         self.transl_loss = nn.SmoothL1Loss(reduction='none')
         self.rot_loss = nn.SmoothL1Loss(reduction='none')         
         
-        self.weight_corr = 100000.0
-        self.weight_point_cloud = 0.2 
-        self.weight_clone = 10.0
-        self.weight_t_mae = 3.0
-        self.weight_rot = 0.1
+        self.weight_corr = 0.05 #init 0.05
+        self.weight_point_cloud = 0.2 #init 0.2
+        self.weight_clone = 10.0 # init : 10
+        self.weight_t_mae = 3.0  #init :3
+        self.weight_rot = 0.1  #init :0.1
         self.loss = {} 
         
         print ( "------- devide weght rot/trans--------")
@@ -226,8 +226,8 @@ class CombinedLoss(nn.Module):
 
         # point cloud distance loss
         rand_idxs = np.random.choice(current_source.shape[2], 1024, replace=False)
-        src_transformed_samp = current_source[:,:, rand_idxs].clone()
-        ref_clean_samp = point_clouds[:, :, rand_idxs].clone()
+        src_transformed_samp = current_source[:,:, rand_idxs]
+        ref_clean_samp = point_clouds[:, :, rand_idxs]
         dist = torch.min(self.square_distance(src_transformed_samp.permute(0,2,1), ref_clean_samp.permute(0,2,1)), dim=-1)[0]
         chamfer_dist = torch.mean(dist, dim=1).reshape(-1, 1)
         geo_loss = chamfer_dist.mean()
@@ -238,7 +238,7 @@ class CombinedLoss(nn.Module):
 #             print('enter cyclic loss sum')
             cycle_loss = torch.nn.functional.mse_loss(cycle[mask], queries[mask])
             corr_loss += cycle_loss    
-            # corr_loss = corr_loss + cycle_loss
+            corr_loss = corr_loss + cycle_loss
         
         #end = time.time()
         #print("3D Distance Time: ", end-start)
@@ -254,9 +254,11 @@ class CombinedLoss(nn.Module):
         #             self.weight_point_cloud * (point_clouds_loss/target_transl.shape[0])
         total_loss = self.weight_clone* clone_loss + self.weight_rot* loss_rot + self.weight_t_mae* loss_t_mae +self.weight_corr * corr_loss +\
                     self.weight_point_cloud * geo_loss
+        # total_loss = self.weight_clone* clone_loss + self.weight_rot* loss_rot + self.weight_t_mae* loss_t_mae + self.weight_point_cloud * geo_loss # corr freeze
         
         self.loss['total_loss'] = total_loss.sum()/point_clouds.shape[0]
         self.loss['clone_loss'] = clone_loss
+        self.loss['loss_trans'] = loss_transl
         self.loss['loss_rot'] = loss_rot.sum()/point_clouds.shape[0]
         self.loss['loss_t_mae'] = loss_t_mae.sum()/point_clouds.shape[0]
         self.loss['corr_loss'] = corr_loss
