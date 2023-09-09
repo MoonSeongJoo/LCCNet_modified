@@ -34,19 +34,20 @@ import easydict
 import cv2
 import sys
 import yaml
+from image_processing_unit_Ver11_7 import (lidar_project_depth , corr_gen , corr_gen_withZ , dense_map , colormap ,two_images_side_by_side ,random_mask)
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '1'
 
 #loading COTR network model
-from COTR.COTR_models.cotr_model_moon_Ver11_4 import build
-from COTR.utils import utils
+from COTR.COTR_models.cotr_model_moon_Ver12_0 import build
+from COTR.utils import utils, debug_utils
 # from COTR.inference.sparse_engine_Ver3 import SparseEngine
 
 #loading Monodepth2 network model
 import monodepth2.networks
 import MonoDEVSNet.networks
-from environment import environment as env
-from image_processing_unit_Ver11_7 import draw_corrs
+
+device ='cuda'
 
 cotr_args = easydict.EasyDict({
                 "out_dir" : "general_config['out']",
@@ -126,9 +127,8 @@ class MonoDelsNet():
                                     "gan_t_decoder": "ImageDecoder"
                                 }
         #self.trainer_name = 'trainer.py'
-        # self.load_weights_folder = "/home/seongjoo/work/autocalib/LCCNet_Moon/considering_project/MonoDEVSNet/Pre-trained_network" # kaist gpu server2 251
-        # self.load_weights_folder = "/home/pc-3/work/autocalib/considering_project/MonoDEVSNet/Pre-trained_network" # sapeon workstation
-        self.load_weights_folder = "/home/sjmoon/work/autocalib1/considering_project/MonoDEVSNet/Pre-trained_network"
+        # self.load_weights_folder = "/home/seongjoo/work/autocalib/LCCNet_Moon/considering_project/MonoDEVSNet/Pre-trained_network"
+        self.load_weights_folder = "./MonoDEVSNet/Pre-trained_network"
         self.weights_init = "pretrained"
 
         # checking height and width are multiples of 32
@@ -237,6 +237,28 @@ class STNNet(nn.Module):
 
         return x
 
+class COTR(nn.Module):
+    
+    def __init__(self, num_kp=500):
+        super(COTR, self).__init__()
+        self.num_kp = num_kp
+        ##### CORR network #######
+        self.corr = build(cotr_args)
+    
+    def forward(self, sbs_img , query_input):
+        
+        corrs_pred , enc_out = self.corr(sbs_img, query_input)
+        
+        img_reverse_input = torch.cat([sbs_img[..., 640:], sbs_img[..., :640]], axis=-1)
+        ##cyclic loss pre-processing
+        query_reverse = corrs_pred
+        query_reverse[..., 0] = query_reverse[..., 0] - 0.5
+        cycle,_ = self.corr(img_reverse_input, query_reverse)
+        cycle[..., 0] = cycle[..., 0] - 0.5
+        mask = torch.norm(cycle - query_input, dim=-1) < 10 / 640
+
+        return corrs_pred , cycle , mask , enc_out
+    
 class regressor(nn.Module) :
     def __init__(self, dropout=0.0 , num_kp=100) :
         super(regressor,self).__init__()
@@ -244,10 +266,15 @@ class regressor(nn.Module) :
         self.num_kp = num_kp
         self.leakyRELU = nn.LeakyReLU(0.1)
         self.mish = nn.Mish()
+        
+        # transformer encoder feature aggregration
+        self.avgpool = nn.AdaptiveAvgPool2d((1, 1)) # Global Average Pooling
+        self.flatten = nn.Flatten()
+        self.linear = nn.Linear(312, 100) 
 
-        self.fc0_rot_aggr = nn.Linear(self.num_kp * 9 , 1024) # select numer of corresepondence matching point * 2 shape[0] # ========= number of kp (self.num_kp) * 4 ===========
+        self.fc0_rot_aggr = nn.Linear(self.num_kp * 10 , 1024) # select numer of corresepondence matching point * 2 shape[0] # ========= number of kp (self.num_kp) * 4 ===========
         self.bn0_rot_aggr = nn.BatchNorm1d(1024)
-        self.fc0_tarsl_aggr = nn.Linear(self.num_kp * 9 , 1024) # select numer of corresepondence matching point * 2 shape[0] # ========= number of kp (self.num_kp) * 4 ===========
+        self.fc0_tarsl_aggr = nn.Linear(self.num_kp * 10 , 1024) # select numer of corresepondence matching point * 2 shape[0] # ========= number of kp (self.num_kp) * 4 ===========
         self.bn0_tarsl_aggr = nn.BatchNorm1d(1024)
  
         self.fc0_trasl = nn.Linear(1024, 512)
@@ -266,159 +293,85 @@ class regressor(nn.Module) :
         self.dropout1 = nn.Dropout(0.1)
         self.dropout2 = nn.Dropout(0.5)
 
-
-class COTR(nn.Module):
-    
-    def __init__(self, num_kp=500):
-        super(COTR, self).__init__()
-        self.num_kp = num_kp
-        ##### CORR network #######
-        self.corr = build(cotr_args)
-    
-    def forward(self, sbs_img , query_input):
-        
-        corrs_pred , enc_out = self.corr(sbs_img, query_input)
-        
-        img_reverse_input = torch.cat([sbs_img[..., 640:], sbs_img[..., :640]], axis=-1)
-        ##cyclic loss pre-processing
-        query_reverse = corrs_pred
-        query_reverse[..., 0] = query_reverse[..., 0] - 0.5
-        cycle , _ = self.corr(img_reverse_input, query_reverse)
-        cycle[..., 0] = cycle[..., 0] - 0.5
-        mask = torch.norm(cycle - query_input, dim=-1) < 10 / 640
-
-        return corrs_pred , cycle , mask, enc_out
-
-# Calibration action prediction part
-class CalibActionHead(nn.Module):
-    def __init__(self):
-        super(CalibActionHead, self).__init__()
-        self.activation = nn.ReLU()
-        # self.input_dim = 32*8*16
-        self.input_dim = 1000 # batch * (number of keypoint*corr columns)
-        self.head_dim = 128
-        
-        self.lstm = nn.LSTM(input_size = self.input_dim, hidden_size = 2*self.head_dim, 
-                            num_layers = 2, batch_first = True, dropout = 0.5)
-
-        self.emb_r = nn.Sequential(
-            nn.Linear(self.head_dim*2, self.head_dim),
-            self.activation
-        )
-
-        self.emb_t = nn.Sequential(
-            nn.Linear(self.head_dim*2, self.head_dim),
-            self.activation
-        )
-        self.action_t = nn.Linear(self.head_dim, 3)
-        self.action_r = nn.Linear(self.head_dim, 3)
-        
-    def forward(self, state, h_n, c_n):
-        state = state.view(state.shape[0], -1)
-
-        output, (h_n, c_n) = self.lstm(state.unsqueeze(1), (h_n, c_n))
-        emb_t = self.emb_t(output)
-        emb_r = self.emb_r(output)
-        
-        action_mean_t = self.action_t(emb_t).squeeze(1)
-        action_mean_r = self.action_r(emb_r).squeeze(1)
-        action_mean = [action_mean_t, action_mean_r]
-        
-        return action_mean, (h_n, c_n)
-
-class GenerateSeq(nn.Module):
-    """
-        에이전트 네트워크를 기반으로 고정 길이 교정 작업 시퀀스 생성
-    """
-    def __init__(self, model):
-        super(GenerateSeq, self).__init__()
-        self.agent = model
-    
-    def forward(self,ds_pc_source,corr_feature, pos_src, pos_tgt):
-        batch_size = ds_pc_source.shape[0]
-        trg_seqlen = 3
-
-        # 출력 결과 초기화
-        outputs_save_transl=torch.zeros(batch_size,trg_seqlen,3)
-        outputs_save_rot=torch.zeros(batch_size,trg_seqlen,3) # agent행동
-        exp_outputs_save_transl=torch.zeros(batch_size,trg_seqlen,3)
-        exp_outputs_save_rot=torch.zeros(batch_size,trg_seqlen,3) # 전문가들이 조치를 감독합니다.
-        h_last = torch.zeros(2, corr_feature.shape[0], 256).cuda()
-        c_last = torch.zeros(2, corr_feature.shape[0], 256).cuda() # lstm의 중간 출력
-        exp_pos_src = pos_src
-        
-        # 액션 시퀀스 생성
-        for i in range(0, trg_seqlen):
-            # 전문가의 움직임
-            expert_action = env.expert_step_real(exp_pos_src.detach(), pos_tgt.detach())
-            # 에이전트 작업
-            actions, hc = self.agent(corr_feature.detach() , h_last.detach(), c_last.detach())
-            h_last, c_last = hc[0].detach(), hc[1].detach()
-            action_t, action_r = actions[0].unsqueeze(1).detach(), actions[1].unsqueeze(1).detach()
-            action_tr = torch.cat([action_t, action_r], dim = 1).detach()
-            # 다음 단계 상태
-            new_source, pos_src = env.step_continous(ds_pc_source.detach(), action_tr, pos_src.detach()) # new_source는 현재 포인트 클라우드를 기록하는 데만 사용되며 입력 포인트 클라우드(apply_trafo에 의해 결정됨)를 반복적으로 업데이트하지 않습니다.
-            _ , exp_pos_src = env.step_continous(ds_pc_source.detach(), expert_action, exp_pos_src)
-            # 상태 업데이트
-            current_source = new_source
-            # depth = lidar_project_depth_batch(current_source, calib, (384, 1280))  # 업데이트된 포인트 클라우드에 해당하는 배치의 깊이 맵
-            # depth /= 80
-            # get
-            exp_outputs_save_transl[:,i,:]=expert_action[:,0]
-            exp_outputs_save_rot[:,i,:]=expert_action[:,1]
-            outputs_save_transl[:,i,:]=actions[0].squeeze(1)
-            outputs_save_rot[:,i,:]=actions[1].squeeze(1)
-
-        return exp_outputs_save_transl, exp_outputs_save_rot, outputs_save_transl, outputs_save_rot, pos_src, current_source
-
-
 class DepthCalibTranformer(nn.Module):
+    """
+    Based on the PWC-DC net. add resnet encoder, dilation convolution and densenet connections
+    """
 
     def __init__(self, image_size =64, use_feat_from=1, md=4, use_reflectance=False, dropout=0.0,
                  Action_Func='leakyrelu', attention=False, res_num=50 , num_kp=500 ):
-  
+        """
+        input: md --- maximum displacement (for correlation. default: 4), after warpping
+        """
         super(DepthCalibTranformer, self).__init__()
         self.num_kp = num_kp
-
-        ##### CORR network #######
-        self.corr = COTR(self.num_kp)
-        self.avgpool = nn.AdaptiveAvgPool2d((1, 1)) # Global Average Pooling
-        self.flatten = nn.Flatten()
-        self.linear = nn.Linear(312, 100) 
-        # self.linear_y = nn.Linear(900, 100) # Fully Connected Layer to reduce the flattened y to match the feature_emb dimension
-        ##### Regressor network ########
-        # self.regressor = regressor(dropout=0.0, num_kp=self.num_kp) # FC regressor
-        self.regressor = CalibActionHead() # LSTM regressor
-
-        self.calib_seq = GenerateSeq(self.regressor)
-
-    def forward(self, ds_pc_source, sbs_img , query_input ,corr_target , pos_src, pos_tgt):
-#         print ("------- monodepth2 input information--------" )
-        # print ("rgb_input_shape =" , rgb_input.shape)
-#         print ("depth_input_shape =" , depth_input.shape)
-#         print ("query_input_shape =" , query_input.shape)
-
-#         ####### display input signal #########        
-#         plt.figure(figsize=(10, 10))
-# #         plt.imshow(cv2.cvtColor(torchvision.utils.make_grid(rgb_input).cpu().numpy() , cv2.COLOR_BGR2RGB))
-#         plt.imshow(torchvision.utils.make_grid(sbs_img).permute(1,2,0).cpu().numpy())
-#         plt.title("RGB_input", fontsize=22)
-#         plt.axis('off')
         
-        corrs_pred ,cycle, mask ,enc_out = self.corr(sbs_img, query_input)
+        # self.mono = MonoDepth() # depth estimation by monodepth2
+        self.mono = MonoDelsNet() # depth estimation by monodepth2
+        # self.STN = STNNet()
+   
+        self.corr = COTR(self.num_kp)
+        # self.corr = build(cotr_args)
+        self.regressor = regressor(dropout=0.0, num_kp=self.num_kp)
+
+    def forward(self, rgb_input, depth_input , query_input ,corr_target):
+
+        rgb_pred_input = []        
+        
+        with torch.no_grad():
+            rgb_features, _ = self.mono.models["encoder"](rgb_input)
+            rgb_outputs  = self.mono.models["depth_decoder"](rgb_features)
+            
+        rgb_depth_pred = rgb_outputs[("disp", 0)]
+        
+        for idx in range(len(rgb_depth_pred)):
+            rgb_pred = rgb_depth_pred[idx].squeeze(0)
+            rgb_pred = colormap(rgb_pred)
+            # rgb_pred = torch.from_numpy(rgb_pred)
+            # batch stack 
+            rgb_pred_input.append(rgb_pred)
+        
+        rgb_pred_input = torch.stack(rgb_pred_input)
+        
+        rgb_pred_input = rgb_pred_input.permute(0,2,3,1)
+        rgb_pred_input = rgb_pred_input.type(torch.float32)
+        depth_input = depth_input.type(torch.float32)
+        
+        # Spatial Transformer Network forwarding pass
+        # 입력을 변환
+        # depth_input = self.STN.stn(depth_input)
+        depth_input = depth_input.permute(0,2,3,1)
+        
+        sbs_img = two_images_side_by_side(rgb_pred_input, depth_input)
+        sbs_img = torch.from_numpy(sbs_img).permute(0,3,1,2).to(device)
+        sbs_img = tvtf.normalize(sbs_img, (0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
+
+        sbs_img_masked = random_mask(sbs_img)
+
+        query_input[:,:,0] = query_input[:,:,0]/2    # recaling points for sbs image resizing
+        query_input[:,:,1] = query_input[:,:,1]/2 
+        corr_target[:,:,0] = corr_target[:,:,0]/2 + 0.5 # recaling points for sbs image resizing
+        corr_target[:,:,1] = corr_target[:,:,1]/2 
+        # query_input =  query_input.cuda().type(torch.float32)
+        # corr_target =  corr_target.cuda().type(torch.float32)
+        
+        # print("img_input dtype :" , img_input.dtype)
+        # print("query dtype :" , query.dtype)
+        # with torch.no_grad():
+        corrs_pred ,cycle, mask ,enc_out = self.corr(sbs_img_masked, query_input)
         
         # ##### display corrs images #############
         # corr_target_cpu =  corr_target
-        # img_cpu   =  sbs_img.cpu()
+        # img_cpu   =  img_input.cpu()
         # corrs_cpu = corrs_pred.cpu().detach().numpy()
         # query_cpu = query_input.cpu().detach().numpy()
         # corr_target_cpu = corr_target.cpu().detach().numpy()
         
         # pred_corrs = np.concatenate([query_cpu, corrs_cpu], axis=-1)
-        # pred_corrs , draw_pred_out = draw_corrs(img_cpu, pred_corrs)
+        # pred_corrs , draw_pred_out = self.draw_corrs(img_cpu, pred_corrs)
         
         # target_corrs = np.concatenate([query_cpu, corr_target_cpu], axis=-1)
-        # target_corrs , draw_target_out = draw_corrs(img_cpu, target_corrs)
+        # target_corrs , draw_target_out = self.draw_corrs(img_cpu, target_corrs)
 
         # print ('------------- display start for analysis-------------')
         # plt.figure(figsize=(20, 40))
@@ -437,46 +390,40 @@ class DepthCalibTranformer(nn.Module):
         # print ('------------- display end for analysis-------------')
         # ##### end of display corrs images #############
         
-#         if mask.sum() > 0:
-#             ('enter cyclic loss mask sum')
-#             cycle_loss = torch.nn.functional.mse_loss(cycle[mask], query[mask])        
-        
         concat_pred_corrs = torch.cat((query_input,corrs_pred),dim=-1)
         x_diff = concat_pred_corrs[:, :, 0] - concat_pred_corrs[:, :, 3]  # x - x1 차분
         y_diff = concat_pred_corrs[:, :, 1] - concat_pred_corrs[:, :, 4]  # y - y1 차분
         z_diff = concat_pred_corrs[:, :, 2] - concat_pred_corrs[:, :, 5]  # z - z1 차분
         concat_pred_corrs_diff = torch.stack([x_diff, y_diff,z_diff], dim=2)  # 차분 형태로 변환된 A (shape: (batch, 100, 3))
- 
+
         corrs_emb = torch.cat((concat_pred_corrs, concat_pred_corrs_diff), dim=-1)  # shape (batch, 100, 6) 
-        
-        x = self.avgpool(enc_out)        
-        x = self.flatten(x)
-        x = self.linear(x) # now x has shape [batch_size=1 ,feature_emb_dim_100]
 
-        y=corrs_emb.view(corrs_emb.size(0),-1)   # flatten y to have shape [batch_size = 1,total_features_from_all_embeddings=(num_features_per_embedding*feature_emb_dim)=(9*100)=900]
-        # y=self.linear_y(y)   # now y has shape [batch_size=1 ,feature_emb_dim_100]
+        x = self.regressor.avgpool(enc_out)        
+        x = self.regressor.flatten(x)
+        x = self.regressor.linear(x) # now x has shape [batch_size=1 ,feature_emb_dim_100]
+        y=corrs_emb.view(corrs_emb.size(0),-1) 
 
-        feature_emb=torch.cat((x,y),dim=-1)   #concatenate along the last dimension [batch,100*9+100]
+        feature_emb=torch.cat((x,y),dim=-1) 
 
-        # x = self.regressor.mish(concatenated_tensors)
-        # x = x.view(x.shape[0], -1)
-        # x = self.regressor.dropout1(x)
-        # aggr_rot_x = self.regressor.mish(self.regressor.fc0_rot_aggr(x))
-        # aggr_rot_x = self.regressor.dropout2(aggr_rot_x)
-        # aggr_transl_x = self.regressor.mish(self.regressor.fc0_tarsl_aggr(x))
-        # aggr_transl_x = self.regressor.dropout2(aggr_transl_x)
+        x = self.regressor.mish(feature_emb)
+        x = x.view(x.shape[0], -1)
+        x = self.regressor.dropout1(x)
+        # x = x.to('cuda')
+        # x = x.float()
+        aggr_rot_x = self.regressor.mish(self.regressor.fc0_rot_aggr(x))
+        aggr_rot_x = self.regressor.dropout2(aggr_rot_x)
+        aggr_transl_x = self.regressor.mish(self.regressor.fc0_tarsl_aggr(x))
+        aggr_transl_x = self.regressor.dropout2(aggr_transl_x)
 
-        # transl = self.regressor.mish(self.regressor.fc0_trasl(aggr_transl_x))
-        # rot = self.regressor.mish(self.regressor.fc0_rot(aggr_rot_x))
-        # transl = self.regressor.mish(self.regressor.fc1_trasl(transl))
-        # rot = self.regressor.mish(self.regressor.fc1_rot(rot))
-        # transl = self.regressor.fc2_trasl(transl)
-        # rot = self.regressor.fc2_rot(rot)
-        # rot = F.normalize(rot, dim=1)
-        
-        exp_transl_seq, exp_rot_seq, transl_seq, rot_seq, pos_final, current_source = self.calib_seq (ds_pc_source, feature_emb, pos_src, pos_tgt)
-        
-        return corrs_pred , cycle , mask ,exp_transl_seq, exp_rot_seq, transl_seq, rot_seq, pos_final, current_source 
+        transl = self.regressor.mish(self.regressor.fc0_trasl(aggr_transl_x))
+        rot = self.regressor.mish(self.regressor.fc0_rot(aggr_rot_x))
+        transl = self.regressor.mish(self.regressor.fc1_trasl(transl))
+        rot = self.regressor.mish(self.regressor.fc1_rot(rot))
+        transl = self.regressor.fc2_trasl(transl)
+        rot = self.regressor.fc2_rot(rot)
+        rot = F.normalize(rot, dim=1)
+
+        return transl, rot , corrs_pred , cycle , mask
             
 
         

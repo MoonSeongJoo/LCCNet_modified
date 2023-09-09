@@ -55,11 +55,11 @@ class COTR(nn.Module):
 #         print ("tr_input", tr_input.shape)
 #         print ("queries_after_shape" , queries.shape)
         # hs  = self.transformer(tr_input, mask, queries, pos[-1])[0]
-        hs , enc_out  = self.transformer(tr_input, mask, queries, pos[-1])
+        hs , enc_out = self.transformer(tr_input, mask, queries, pos[-1])
         outputs_corr = self.corr_embed(hs)[-1]
         # out = {'pred_corrs': outputs_corr[-1]}
         corr_out = outputs_corr
-        return corr_out ,enc_out
+        return corr_out , enc_out
 
 
 def build(args):

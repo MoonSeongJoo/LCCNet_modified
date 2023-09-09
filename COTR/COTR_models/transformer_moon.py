@@ -55,8 +55,8 @@ class Transformer(nn.Module):
         tgt = torch.zeros_like(query_embed) # same shape query_embed but each component all 0 
         #print ("tgt_shape", tgt.shape)
         memory = self.encoder(src, src_key_padding_mask=mask, pos=pos_embed)
-#         hs = self.decoder(tgt, memory, memory_key_padding_mask=mask,pos=pos_embed, query_pos=query_embed)
-        hs = self.decoder(tgt, memory, memory_key_padding_mask=None ,pos=pos_embed, query_pos=query_embed)
+        hs = self.decoder(tgt, memory, memory_key_padding_mask=mask,pos=pos_embed, query_pos=query_embed)
+        # hs = self.decoder(tgt, memory, memory_key_padding_mask=None ,pos=pos_embed, query_pos=query_embed)
         return hs.transpose(1, 2), memory.permute(1, 2, 0).view(bs, c, h, w)
 
 

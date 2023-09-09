@@ -7,8 +7,6 @@ import matplotlib.cm as cm
 import scipy
 import skimage
 # from pypardiso import spsolve
-from PIL import Image , ImageDraw
-from COTR.utils import utils
 
 def get_2D_lidar_projection(pcl, cam_intrinsic):
     pcl_xyz = cam_intrinsic @ pcl.T
@@ -472,7 +470,7 @@ def draw_center_point(self, img):
 
     return np.array(img)
 
-def draw_corrs(imgs, corrs, col=(255, 0, 0)):
+def draw_corrs(self, imgs, corrs, col=(255, 0, 0)):
     imgs = utils.torch_img_to_np_img(imgs)
     out = []
     

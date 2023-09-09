@@ -35,8 +35,8 @@ from torchvision.transforms import functional as tvtf
 from sacred import Experiment
 from sacred.utils import apply_backspaces_and_linefeeds
 
-from DatasetLidarCamera_Ver11_7 import DatasetLidarCameraKittiOdometry
-from losses_Ver11_7 import DistancePoints3D, GeometricLoss, L1Loss, ProposedLoss, CombinedLoss
+from DatasetLidarCamera_Ver13_0 import DatasetLidarCameraKittiOdometry
+from losses_Ver13_0 import DistancePoints3D, GeometricLoss, L1Loss, ProposedLoss, CombinedLoss
 
 
 from quaternion_distances import quaternion_distance
@@ -46,8 +46,8 @@ from utils import (mat2xyzrpy, merge_inputs, overlay_imgs, quat2mat,
                    quaternion_from_matrix, rotate_back, rotate_forward,
                    tvector2mat)
 
-from image_processing_unit_Ver11_7 import (lidar_project_depth , corr_gen , corr_gen_withZ , dense_map , colormap ,two_images_side_by_side ,random_mask)
-from LCCNet_COTR_moon_Ver11_7 import DepthCalibTranformer , MonoDelsNet
+from image_processing_unit_Ver13_0 import (lidar_project_depth , corr_gen , corr_gen_withZ , dense_map , colormap ,two_images_side_by_side ,random_mask)
+from LCCNet_COTR_moon_Ver13_0 import DepthCalibTranformer , MonoDelsNet
 # from gennerate_sequence import GenerateSeq
 # from environment import environment as env
 
@@ -97,15 +97,15 @@ def config():
     epochs = 1000
     BASE_LEARNING_RATE = 1e-5 # 1e-4
     loss = 'combined'
-    max_t = 0.25 # 1.5, 1.0,  0.5,  0.2,  0.1
-    max_r = 10.0 # 20.0, 10.0, 5.0,  2.0,  1.0
+    max_t = 1.5 # 1.5, 1.0,  0.5,  0.2,  0.1
+    max_r = 20.0 # 20.0, 10.0, 5.0,  2.0,  1.0
     batch_size = 20 # 120
     num_worker = 10
     network = 'Res_f1'
     optimizer = 'adamW'
     resume = False
     # weights = '/home/seongjoo/work/autocalib1/considering_project/checkpoints/kitti/odom/val_seq_07/models/checkpoint_r20.00_t1.50_e19_1.885.tar'
-    weights = './checkpoints/kitti/odom/val_seq_07/models/checkpoint_r10.00_t0.25_e29_28.100.tar'
+    weights = './checkpoints/kitti/odom/val_seq_07/models/checkpoint_r10.00_t0.25_e17_1.359.tar'
     # weights = None
     rescale_rot = 1.0  #LCCNet initail value = 1.0 # value did not use
     rescale_transl = 100.0  #LCCNet initatil value = 2.0 # value did not use
@@ -115,7 +115,7 @@ def config():
     weight_point_cloud = 0.1 # 이값은 무시해도 됨 loss function에서 직접 관장 원래 LCCNet initail = 0.5
     log_frequency = 1000
     print_frequency = 50
-    starting_epoch = 30
+    starting_epoch = 18
     num_kp = 100
     dense_resoltuion = 2
     local_log_frequency = 50
@@ -128,7 +128,7 @@ def config():
     all_net_init = None
 
 # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-os.environ["CUDA_VISIBLE_DEVICES"] = '1'
+os.environ["CUDA_VISIBLE_DEVICES"] = '3'
 device='cuda'
 
 EPOCH = 1
