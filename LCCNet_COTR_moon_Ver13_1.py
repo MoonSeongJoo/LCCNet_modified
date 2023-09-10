@@ -393,6 +393,8 @@ class FeatureFusion(nn.Module):
         )
         
         self.leakyRELU = nn.LeakyReLU(negative_slope=0.01)
+        # Add a dropout layer
+        self.dropout = nn.Dropout(p=0.5)
 
     def forward(self, corrs_emb , enc_out ):
         
@@ -408,6 +410,7 @@ class FeatureFusion(nn.Module):
         match_enc_residual = self.match_block(match_enc)
 
         match_emb = match_enc + match_enc_residual
+        match_emb = self.dropout(match_emb)
         match_emb = self.leakyRELU(match_emb)
         
         return match_emb

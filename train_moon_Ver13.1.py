@@ -46,7 +46,9 @@ from utils import (mat2xyzrpy, merge_inputs, overlay_imgs, quat2mat,
                    quaternion_from_matrix, rotate_back, rotate_forward,
                    tvector2mat)
 
-from image_processing_unit_Ver13_1 import (lidar_project_depth , corr_gen , corr_gen_withZ , dense_map , colormap ,two_images_side_by_side ,random_mask)
+from image_processing_unit_Ver13_1 import (lidar_project_depth , corr_gen , corr_gen_withZ , dense_map , colormap ,
+                                           two_images_side_by_side ,two_images_side_by_side_for_gray,
+                                           two_images_side_by_side_for_gray_scale,random_mask)
 from LCCNet_COTR_moon_Ver13_1 import DepthCalibTranformer , MonoDelsNet
 # from gennerate_sequence import GenerateSeq
 # from environment import environment as env
@@ -88,10 +90,10 @@ poses_path = "data_odometry_poses"
 def config():
     checkpoints = './checkpoints/'
     dataset = 'kitti/odom' # 'kitti/raw'
-    # data_folder = "/data/kitti/kitti_odometry"
+    data_folder = "/data/kitti/kitti_odometry" #sapeon gpu sever 61
     # data_folder = "/mnt/sgvrnas/sjmoon/kitti/kitti_odometry"  # kaist gpu server 2 
     # data_folder = "/mnt/data/kitti_odometry" # KAIST GPU server 1
-    data_folder = "/mnt/sjmoon/kitti/kitti_odometry"  # sapeon desktop gpu 4090
+    # data_folder = "/mnt/sjmoon/kitti/kitti_odometry"  # sapeon desktop gpu 4090
     use_reflectance = False
     val_sequence = 7
     epochs = 1000
@@ -99,7 +101,7 @@ def config():
     loss = 'combined'
     max_t = 0.25 # 1.5, 1.0,  0.5,  0.2,  0.1
     max_r = 10.0 # 20.0, 10.0, 5.0,  2.0,  1.0
-    batch_size = 15 # 120
+    batch_size = 1 # 120
     num_worker = 10
     network = 'Res_f1'
     optimizer = 'adamW'
@@ -128,7 +130,7 @@ def config():
     all_net_init = None
 
 # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-os.environ["CUDA_VISIBLE_DEVICES"] = '0'
+os.environ["CUDA_VISIBLE_DEVICES"] = '2'
 device='cuda'
 
 EPOCH = 1
@@ -673,9 +675,17 @@ def main(_config, _run, seed):
                 lidarOnImage = torch.cat((uv, z), dim=1)
                 dense_depth_img = dense_map(lidarOnImage.T , real_shape[1], real_shape[0] , _config['dense_resoltuion']) # argument = (lidarOnImage.T , 1241, 376 , 8)
                 # dense_depth_img = dense_depth_img.astype(np.uint8)
-                dense_depth_img = dense_depth_img.to(dtype=torch.uint8)
-                dense_depth_img_color = colormap(dense_depth_img)
-                # dense_depth_img_color = transforms.ToTensor()(dense_depth_img_color)
+                
+                # #### display lidar depth gray ######
+                # plt.figure(figsize=(12, 12))
+                # plt.imshow(dense_depth_img.cpu().numpy(), cmap='gray')
+                # plt.show()
+                # #### end of display ################
+
+                dense_depth_img_color = dense_depth_img.unsqueeze(0) # gray only 
+
+                # dense_depth_img = dense_depth_img.to(dtype=torch.uint8) # data converting for color mapping
+                # dense_depth_img_color = colormap(dense_depth_img) # color mapping 
                 
                 # PAD ONLY ON RIGHT AND BOTTOM SIDE
                 shape_pad = [0, 0, 0, 0]
@@ -715,6 +725,30 @@ def main(_config, _run, seed):
             corrs_input = torch.stack(corrs_input)
             ds_pc_source_input = torch.stack(ds_pc_source_input)
             ds_pc_target_input = torch.stack(ds_pc_target_input)
+            
+            lidar_projetion_input[torch.isnan(lidar_projetion_input)] = 0
+            # Assuming lidar_projetion_input is your tensor
+            lidar_min_value = torch.min(lidar_projetion_input)
+            lidar_max_value = torch.max(lidar_projetion_input)
+            lidar_mean_value = torch.mean(lidar_projetion_input)
+            lidar_variance_value = torch.var(lidar_projetion_input)
+
+            # print(f"lidar_projetion_input Min: {lidar_min_value}")
+            # print(f"lidar_projetion_input Max: {lidar_max_value}")
+            # print(f"lidar_projetion_input Mean: {lidar_mean_value}")
+            # print(f"lidar_projetion_input Variance: {lidar_variance_value}")
+
+            normalized_lidar_projection_input = (lidar_projetion_input - lidar_min_value) / (lidar_max_value - lidar_min_value)
+            
+            # lidar_min_value = torch.min(normalized_lidar_projection_input)
+            # lidar_max_value = torch.max(normalized_lidar_projection_input)
+            # lidar_mean_value = torch.mean(normalized_lidar_projection_input)
+            # lidar_variance_value = torch.var(normalized_lidar_projection_input)
+
+            # print(f"after normalization lidar_projetion_input Min: {lidar_min_value}")
+            # print(f"after normalization lidar_projetion_input Max: {lidar_max_value}")
+            # print(f"after normalization lidar_projetion_input Mean: {lidar_mean_value}")
+            # print(f"after normalization lidar_projetion_input Variance: {lidar_variance_value}")
 
             ############ rgb mono depth prediction ##############  
             with torch.no_grad():
@@ -724,36 +758,87 @@ def main(_config, _run, seed):
                 # rgb_outputs  = self.mono.depth_decoder(rgb_features) # for monodepth2
                 
             rgb_depth_pred = rgb_outputs[("disp", 0)]
-            
-            for idx in range(len(rgb_depth_pred)):
-                rgb_pred = rgb_depth_pred[idx].squeeze(0)
-                # print ('center of depth value =' , rgb_pred[192//2,640//2] )
-                rgb_pred = colormap(rgb_pred)
-                # rgb_pred = torch.from_numpy(rgb_pred)
-                # batch stack 
-                rgbdepth_pred_input.append(rgb_pred)
-            
-            rgbdepth_pred_input = torch.stack(rgbdepth_pred_input)
+            rgbdepth_pred_input = rgb_depth_pred
 
-            rgbdepth_pred_input = rgbdepth_pred_input.permute(0,2,3,1)
-            lidar_projetion_input = lidar_projetion_input.permute(0,2,3,1)
+            rgb_min_value = torch.min(rgbdepth_pred_input)
+            rgb_max_value = torch.max(rgbdepth_pred_input)
+            rgb_mean_value = torch.mean(rgbdepth_pred_input)
+            rgb_variance_value = torch.var(rgbdepth_pred_input)
 
-            sbs_img = two_images_side_by_side(rgbdepth_pred_input, lidar_projetion_input)
-            sbs_img = torch.from_numpy(sbs_img).permute(0,3,1,2).cuda()
-            sbs_img = tvtf.normalize(sbs_img, (0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
-            
-            sbs_img_masked = random_mask(sbs_img)
-            
-            # ####### display input signal #########        
-            # plt.figure(figsize=(10, 10))
+            # print(f"rgb_depth_input Min: {rgb_min_value}")
+            # print(f"rgb_depth_input Max: {rgb_max_value}")
+            # print(f"rgb_depth_input Mean: {rgb_mean_value}")
+            # print(f"rgb_depth_input Variance: {rgb_variance_value}")
+
+            normalized_rgbdepth_pred_input = (rgbdepth_pred_input - rgb_min_value) / (rgb_max_value - rgb_min_value)
+
+            # rgb_min_value = torch.min(normalized_rgbdepth_pred_input)
+            # rgb_max_value = torch.max(normalized_rgbdepth_pred_input)
+            # rgb_mean_value = torch.mean(normalized_rgbdepth_pred_input)
+            # rgb_variance_value = torch.var(normalized_rgbdepth_pred_input)
+
+            # print(f"after normalization rgb_depth_input Min: {rgb_min_value}")
+            # print(f"after normalization rgb_depth_input Max: {rgb_max_value}")
+            # print(f"after normalization rgb_depth_input Mean: {rgb_mean_value}")
+            # print(f"after normalization rgb_depth_input Variance: {rgb_variance_value}")
+
+            # plt.figure(figsize=(20, 40))
             # plt.subplot(211)
-            # plt.imshow(torchvision.utils.make_grid(sbs_img).permute(1,2,0).cpu().numpy())
-            # plt.title("RGB_input", fontsize=22)
-            # plt.axis('off')
+            # plt.imshow(torchvision.utils.make_grid(normalized_rgbdepth_pred_input , normalize = True).permute(1,2,0).cpu(),cmap='gray')
+            # plt.title("pred_corrs", fontsize=22)
+            # plt.axis('off') 
+            # plt.show()        
 
+            # plt.figure(figsize=(20, 40))
             # plt.subplot(212)
-            # plt.imshow(torchvision.utils.make_grid(sbs_img_masked).permute(1,2,0).cpu().numpy() , cmap='magma')
-            # plt.title("dense_depth_input", fontsize=22)
+            # plt.imshow(torchvision.utils.make_grid(normalized_lidar_projection_input, normalize = True).permute(1,2,0).cpu() , cmap='gray')
+            # plt.title("gt_corrs", fontsize=22)
+            # plt.axis('off')
+            # plt.show()
+            
+            # # ###  for color mapping ###########
+            # for idx in range(len(rgb_depth_pred)):
+            #     rgb_pred = rgb_depth_pred[idx].squeeze(0)
+            #     # #### display lidar depth gray ######
+            #     # plt.figure(figsize=(12, 12))
+            #     # plt.imshow(rgb_pred.cpu().numpy(), cmap='gray')
+            #     # plt.show()
+            #     # #### end of display ################
+                
+            #     rgb_pred = colormap(rgb_pred) # for color mapping
+            #     # rgb_pred = torch.from_numpy(rgb_pred)
+            #     # batch stack 
+            #     rgbdepth_pred_input.append(rgb_pred)
+            
+            # rgbdepth_pred_input = torch.stack(rgbdepth_pred_input)
+
+            normalized_rgbdepth_pred_input = normalized_rgbdepth_pred_input.permute(0,2,3,1)
+            normalized_lidar_projection_input = normalized_lidar_projection_input.permute(0,2,3,1)
+
+            # print(lidar_projetion_input.min(), lidar_projetion_input.max())
+            # print(rgbdepth_pred_input.min(), rgbdepth_pred_input.max())
+
+            sbs_img = two_images_side_by_side_for_gray(normalized_rgbdepth_pred_input, normalized_lidar_projection_input)
+            sbs_img = torch.from_numpy(sbs_img).permute(0,3,1,2).to(device)
+            sbs_img_rgb = torch.cat([sbs_img, sbs_img, sbs_img], dim=1)
+            # sbs_img = tvtf.normalize(sbs_img, (0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
+            # sbs_img = tvtf.normalize(sbs_img,(0.5,), (0.5,)) #for gray normalization
+            
+            sbs_img_masked = random_mask(sbs_img_rgb)
+            
+            # ####### display input signal #########   
+            # # sbs_img_disp =torchvision.utils.make_grid(sbs_img_rgb).cpu().numpy().transpose((1,2,0))[:,:,0] 
+            # sbs_img_disp =torchvision.utils.make_grid(sbs_img_rgb , normalize = True).permute(1,2,0).cpu()   
+            # plt.figure(figsize=(20, 40))
+            # plt.imshow(sbs_img_disp, cmap ='gray')
+            # plt.title("sbs_img", fontsize=22)
+            # plt.axis('off')
+            
+            # # sbs_img_masked_disp = torchvision.utils.make_grid(sbs_img_masked).cpu().numpy().transpose((1,2,0))[:,:,0]
+            # sbs_img_masked_disp =torchvision.utils.make_grid(sbs_img_masked , normalize = True).permute(1,2,0).cpu()
+            # plt.figure(figsize=(20, 40))
+            # plt.imshow(sbs_img_masked_disp , cmap='gray')
+            # plt.title("sbs_img_masked", fontsize=22)
             # plt.axis('off')        
             # ############# end of display input signal ###################
 
@@ -927,7 +1012,6 @@ def main(_config, _run, seed):
         else : 
             train_writer.add_scalar("Loss_Total", loss.item(), train_iter)
         
-        # torch.cuda.empty_cache()
         
         ## Validation ##
         total_val_loss = 0.
@@ -992,10 +1076,11 @@ def main(_config, _run, seed):
                 # lidarOnImage = np.hstack([uv, z])
                 lidarOnImage = torch.cat((uv, z), dim=1)
                 dense_depth_img = dense_map(lidarOnImage.T , real_shape[1], real_shape[0] , _config['dense_resoltuion']) # argument = (lidarOnImage.T , 1241, 376 , 8)
-                # dense_depth_img = dense_depth_img.astype(np.uint8)
-                dense_depth_img = dense_depth_img.to(dtype=torch.uint8)
-                dense_depth_img_color = colormap(dense_depth_img)
-                # dense_depth_img_color = transforms.ToTensor()(dense_depth_img_color)                
+
+                dense_depth_img_color = dense_depth_img.unsqueeze(0) # gray only
+            
+                # dense_depth_img = dense_depth_img.to(dtype=torch.uint8) # for rgb color
+                # dense_depth_img_color = colormap(dense_depth_img) # for rgb color               
                 
                 # PAD ONLY ON RIGHT AND BOTTOM SIDE
                 shape_pad = [0, 0, 0, 0]
@@ -1030,6 +1115,15 @@ def main(_config, _run, seed):
             corrs_input = torch.stack(corrs_input)
             ds_pc_source_input = torch.stack(ds_pc_source_input)
             ds_pc_target_input = torch.stack(ds_pc_target_input)  
+
+            lidar_projetion_input[torch.isnan(lidar_projetion_input)] = 0
+            # Assuming lidar_projetion_input is your tensor
+            lidar_min_value = torch.min(lidar_projetion_input)
+            lidar_max_value = torch.max(lidar_projetion_input)
+            lidar_mean_value = torch.mean(lidar_projetion_input)
+            lidar_variance_value = torch.var(lidar_projetion_input)
+
+            normalized_lidar_projection_input = (lidar_projetion_input - lidar_min_value) / (lidar_max_value - lidar_min_value)
             
             ############ rgb mono depth prediction ##############  
             with torch.no_grad():
@@ -1039,23 +1133,32 @@ def main(_config, _run, seed):
                 # rgb_outputs  = self.mono.depth_decoder(rgb_features) # for monodepth2
                 
             rgb_depth_pred = rgb_outputs[("disp", 0)]
-            
-            for idx in range(len(rgb_depth_pred)):
-                rgb_pred = rgb_depth_pred[idx].squeeze(0)
-                rgb_pred = colormap(rgb_pred)
-                # batch stack 
-                rgbdepth_pred_input.append(rgb_pred)
-            
-            rgbdepth_pred_input = torch.stack(rgbdepth_pred_input)
+            rgbdepth_pred_input = rgb_depth_pred
 
-            rgbdepth_pred_input = rgbdepth_pred_input.permute(0,2,3,1)
-            lidar_projetion_input = lidar_projetion_input.permute(0,2,3,1)
+            rgb_min_value = torch.min(rgbdepth_pred_input)
+            rgb_max_value = torch.max(rgbdepth_pred_input)
+            rgb_mean_value = torch.mean(rgbdepth_pred_input)
+            rgb_variance_value = torch.var(rgbdepth_pred_input)
 
-            sbs_img = two_images_side_by_side(rgbdepth_pred_input, lidar_projetion_input)
+            normalized_rgbdepth_pred_input = (rgbdepth_pred_input - rgb_min_value) / (rgb_max_value - rgb_min_value)
+
+            # for idx in range(len(rgb_depth_pred)):
+            #     rgb_pred = rgb_depth_pred[idx].squeeze(0)
+            #     rgb_pred = colormap(rgb_pred)
+            #     # batch stack 
+            #     rgbdepth_pred_input.append(rgb_pred)
+            
+            # rgbdepth_pred_input = torch.stack(rgbdepth_pred_input)
+
+            normalized_rgbdepth_pred_input = normalized_rgbdepth_pred_input.permute(0,2,3,1)
+            normalized_lidar_projection_input = normalized_lidar_projection_input.permute(0,2,3,1)
+
+            sbs_img = two_images_side_by_side(normalized_rgbdepth_pred_input, normalized_lidar_projection_input)
             sbs_img = torch.from_numpy(sbs_img).permute(0,3,1,2).cuda()
-            sbs_img = tvtf.normalize(sbs_img, (0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
+            sbs_img_rgb = torch.cat([sbs_img, sbs_img, sbs_img], dim=1)
+            # sbs_img = tvtf.normalize(sbs_img, (0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
             
-            sbs_img_masked = random_mask(sbs_img)
+            sbs_img_masked = random_mask(sbs_img_rgb)
 
             # ######## display input signal #########        
             # plt.figure(figsize=(10, 10))

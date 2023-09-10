@@ -218,6 +218,62 @@ def two_images_side_by_side(img_a, img_b):
 #         canvas[:, :, : , 1 * w:2 * w] = img_b.cpu().numpy()
     return canvas
 
+def two_images_side_by_side_for_gray(img_a, img_b):
+    assert img_a.shape == img_b.shape, f'{img_a.shape} vs {img_b.shape}'
+    assert img_a.dtype == img_b.dtype
+
+    b, h, w, c = img_a.shape
+
+    # Handle nan values in lidar image.
+    img_a[torch.isnan(img_a)] = 0
+    img_b[torch.isnan(img_b)] = 0
+
+    # Normalize each image individually to [0., 1.] range.
+    
+    max_value_img_a = torch.max(img_a)
+    max_value_img_b = torch.max(img_b)
+    
+    canvas = torch.zeros((b,h,w*2,c), dtype=img_a.dtype).to(img_a.device) # Keep the same device as input tensors
+    
+    canvas[:, :, :w,:] = (img_a / max_value_img_a)
+    canvas[:, :, w:,:] = (img_b / max_value_img_b)
+
+    return canvas.detach().cpu().numpy() # Convert to numpy after all operations
+
+def compute_scale_factor(images):
+    min_value = torch.min(torch.min(images, dim=0)[0], dim=0)[0]
+    max_value = torch.max(torch.max(images, dim=0)[0], dim=0)[0]
+    value_range = max_value - min_value
+    scale_factor = 1 / value_range
+    return scale_factor
+
+def normalize_images(images):
+    scale_factor = compute_scale_factor(images)
+    normalized_images = (images - torch.min(images)) * scale_factor
+    return normalized_images
+
+def two_images_side_by_side_for_gray_scale(img_a, img_b):
+    assert img_a.shape == img_b.shape, f'{img_a.shape} vs {img_b.shape}'
+    assert img_a.dtype == img_b.dtype
+
+    b, h, w, c = img_a.shape
+
+    # Handle nan values in lidar image.
+    img_a[torch.isnan(img_a)] = 0
+    img_b[torch.isnan(img_b)] = 0
+    
+    # Normalize images using the computed scale factor
+    normalized_img_a = normalize_images(img_a)
+    normalized_img_b = normalize_images(img_b)
+
+    canvas = torch.zeros((b,h,w*2,c), dtype=img_a.dtype).to(img_a.device)
+
+    canvas[:, :, :w,:] = normalized_img_a
+    canvas[:, :, w:,:] = normalized_img_b
+
+    return canvas.detach().cpu().numpy()
+
+
 # From Github https://github.com/balcilar/DenseDepthMap
 def dense_map(Pts ,n, m, grid):
     ng = 2 * grid + 1
@@ -414,6 +470,7 @@ def corr_gen_withZ( gt_points_index, points_index, gt_uv, uv , gt_z, z, origin_i
 def random_mask(sbs_img,grid_size=(32, 32), mask_value=0):
     # sbs_img shape: [batch, channel, height, width]
     batch_size, _, height, width = sbs_img.shape
+    # batch_size, height, width ,_ = sbs_img.shape
     mask = torch.ones_like(sbs_img)
 
     grid_height, grid_width = grid_size
