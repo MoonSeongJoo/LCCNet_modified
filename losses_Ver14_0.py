@@ -115,10 +115,10 @@ class CombinedLoss(nn.Module):
         self.rot_loss = nn.SmoothL1Loss(reduction='none')         
         
         self.weight_corr = 0.05 #init 0.05
-        self.weight_point_cloud = 0.2 #init 0.2
-        self.weight_local_transl = 200.0 # clone init : 10
-        self.weight_local_rot = 1.0 # clone init : 10
-        self.weight_t_mae = 20.0  #init :3
+        self.weight_point_cloud = 0.01 #init 0.2
+        self.weight_local_transl = 2000 # clone init : 10
+        self.weight_local_rot = 1000 # clone init : 10
+        self.weight_t_mae = 100  #init :3
         self.weight_quaternion = 0.1  #init :0.1
         self.loss = {} 
         
