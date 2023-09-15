@@ -97,13 +97,13 @@ def config():
     loss = 'combined'
     max_t = 0.25 # 1.5, 1.0,  0.5,  0.2,  0.1
     max_r = 10.0 # 20.0, 10.0, 5.0,  2.0,  1.0
-    batch_size = 1 # 120
+    batch_size = 20 # 120
     num_worker = 10
     network = 'Res_f1'
     optimizer = 'adamW'
-    resume = False
+    resume = True
     # weights = '/home/seongjoo/work/autocalib1/considering_project/checkpoints/kitti/odom/val_seq_07/models/checkpoint_r20.00_t1.50_e19_1.885.tar'
-    weights = './checkpoints/kitti/odom/val_seq_07/models/checkpoint_r10.00_t0.25_e1_0.594.tar'
+    weights = './checkpoints/kitti/odom/val_seq_07/models/checkpoint_r10.00_t0.25_e15_22.412.tar'
     # weights = None
     rescale_rot = 1.0  #LCCNet initail value = 1.0 # value did not use
     rescale_transl = 100.0  #LCCNet initatil value = 2.0 # value did not use
@@ -113,7 +113,7 @@ def config():
     weight_point_cloud = 0.1 # 이값은 무시해도 됨 loss function에서 직접 관장 원래 LCCNet initail = 0.5
     log_frequency = 1000
     print_frequency = 50
-    starting_epoch = 2
+    starting_epoch = 1
     num_kp = 100
     dense_resoltuion = 2
     local_log_frequency = 50
@@ -532,7 +532,8 @@ def main(_config, _run, seed):
         # scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[20, 50, 70], gamma=0.5)
     if _config['optimizer'] == 'adamW':
         optimizer = optim.AdamW(parameters, lr=_config['BASE_LEARNING_RATE'], weight_decay=4e-4)
-        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[200], gamma=0.5)
+        # scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[200], gamma=0.5)
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.5)
         # scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=1e-3 , steps_per_epoch=10 ,epochs=_config['epochs'] , anneal_strategy ='cos')
     
     else:

@@ -391,6 +391,12 @@ class DepthCalibTranformer(nn.Module):
         # ##### end of display corrs images #############
         
         concat_pred_corrs = torch.cat((query_input,corrs_pred),dim=-1)
+
+        concat_pred_corrs[:, :, 0] = concat_pred_corrs[:, :, 0] * 2
+        concat_pred_corrs[:, :, 1] = concat_pred_corrs[:, :, 1] * 2
+        concat_pred_corrs[:, :, 3] = (concat_pred_corrs[:, :, 3] - 0.5) * 2
+        concat_pred_corrs[:, :, 4] = concat_pred_corrs[:, :, 4] * 2
+
         x_diff = concat_pred_corrs[:, :, 0] - concat_pred_corrs[:, :, 3]  # x - x1 차분
         y_diff = concat_pred_corrs[:, :, 1] - concat_pred_corrs[:, :, 4]  # y - y1 차분
         z_diff = concat_pred_corrs[:, :, 2] - concat_pred_corrs[:, :, 5]  # z - z1 차분
