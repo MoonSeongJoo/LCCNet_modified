@@ -76,6 +76,7 @@ cotr_args = easydict.EasyDict({
 #for cotr model parameter setting
 import easydict
 
+
 class MonoDepth():
     def __init__(self):
         self.model_name         = "mono_resnet50_640x192"
@@ -294,7 +295,7 @@ class CalibActionHead(nn.Module):
     def __init__(self):
         super(CalibActionHead, self).__init__()
         self.activation = nn.ReLU()
-        self.input_dim = 200
+        self.input_dim = 123780
         # self.input_dim = 512 # batch * (number of keypoint*corr columns)
         self.head_dim = 128
         
@@ -377,7 +378,7 @@ class FeatureFusion(nn.Module):
         self.match_layer = nn.Sequential(
             # Here you can define the structure of match_layer
             # This is just an example and may not fit your actual needs
-            nn.Conv2d(313, 160, kernel_size=1),
+            nn.Conv2d(312, 160, kernel_size=1),
             nn.BatchNorm2d(160),
             nn.ReLU(),
         )
@@ -396,16 +397,17 @@ class FeatureFusion(nn.Module):
         # Add a dropout layer
         self.dropout = nn.Dropout(p=0.5)
 
-    def forward(self, corrs_emb , enc_out ):
+    def forward(self, enc_out):
         
-        corrs_emb = corrs_emb.view(corrs_emb.size()[0], -1 ,corrs_emb.size()[1],corrs_emb.size()[2]) 
+        # corrs_emb = corrs_emb.view(corrs_emb.size()[0], -1 ,corrs_emb.size()[1],corrs_emb.size()[2]) 
          
          # Average pooling over the spatial dimensions to get a tensor of shape [batch_size,num_channels]
-        enc_out_avgpool = torch.nn.functional.adaptive_avg_pool2d(enc_out,(corrs_emb.size()[2],corrs_emb.size()[3]))
+        enc_out_avgpool = torch.nn.functional.adaptive_avg_pool2d(enc_out,(enc_out.size()[2],enc_out.size()[3]))
+        # enc_out_avgpool = torch.nn.functional.adaptive_avg_pool2d(enc_out,(corrs_emb.size()[2],corrs_emb.size()[3]))
         
-        match_enc = torch.cat((enc_out_avgpool , corrs_emb), dim=1)
+        # match_enc = torch.cat((enc_out_avgpool , corrs_emb), dim=1)
         
-        match_enc = self.match_layer(match_enc)
+        match_enc = self.match_layer(enc_out_avgpool)
         
         match_enc_residual = self.match_block(match_enc)
 
@@ -433,7 +435,7 @@ class DepthCalibTranformer(nn.Module):
         self.linear_x = nn.Linear(312, 100)
         self.linear_y = nn.Linear(900, 100)
 
-        self.feature_bn = nn.BatchNorm1d(200)
+        self.feature_bn = nn.BatchNorm1d(123780)
         self.dropout = nn.Dropout(p=0.5)
    
         self.regressor = CalibActionHead() # LSTM regressor
@@ -503,18 +505,20 @@ class DepthCalibTranformer(nn.Module):
  
         corrs_emb = torch.cat((concat_pred_corrs, concat_pred_corrs_diff), dim=-1)  # shape (batch, 100, 6) 
         
-        x = self.avgpool(enc_out)        
-        x = self.flatten(x)
-        x = self.linear_x(x) # now x has shape [batch_size=1 ,feature_emb_dim_100]
+        # x = self.avgpool(enc_out)        
+        # x = self.flatten(x)
+        # x = self.linear_x(x) # now x has shape [batch_size=1 ,feature_emb_dim_100]
 
-        y = corrs_emb.view(corrs_emb.size(0),-1)   # flatten y to have shape [batch_size = 1,total_features_from_all_embeddings=(num_features_per_embedding*feature_emb_dim)=(9*100)=900]
-        y = self.linear_y(y)   # now y has shape [batch_size=1 ,feature_emb_dim_100]
+        # y = corrs_emb.view(corrs_emb.size(0),-1)   # flatten y to have shape [batch_size = 1,total_features_from_all_embeddings=(num_features_per_embedding*feature_emb_dim)=(9*100)=900]
+        # y = self.linear_y(y)   # now y has shape [batch_size=1 ,feature_emb_dim_100]
         # y = self.linear_y(y)
         
-        feature_emb=torch.cat((x,y),dim=-1)   #concatenate along the last dimension [batch,100*9+100]
+        # feature_emb=torch.cat((x,y),dim=-1)   #concatenate along the last dimension [batch,100*9+100]
         # feature_emb=x
-        # feature_emb=self.feature_emb(corrs_emb,enc_out)
-        # feature_emb = feature_emb.view(feature_emb.size(0), -1)
+        enc_emb = self.feature_emb(enc_out)
+        enc_emb = enc_emb.view(enc_emb.size(0), -1)
+        corrs_emb = corrs_emb.view(corrs_emb.size(0),-1)
+        feature_emb=torch.cat((corrs_emb,enc_emb),dim=-1)
         # feature_emb = self.feature_bn(self.feature_aggr(feature_emb))
         feature_emb =self.dropout(self.feature_bn(feature_emb))
         

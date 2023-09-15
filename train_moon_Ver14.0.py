@@ -109,7 +109,7 @@ def config():
     optimizer = 'adamW'
     resume = False
     # weights = '/home/seongjoo/work/autocalib1/considering_project/checkpoints/kitti/odom/val_seq_07/models/checkpoint_r20.00_t1.50_e19_1.885.tar'
-    # weights = './checkpoints/kitti/odom/val_seq_07/models/checkpoint_r10.00_t0.25_e1_5.929.tar'
+    # weights = './checkpoints/kitti/odom/val_seq_07/models/checkpoint_r10.00_t0.25_e3_7.990.tar'
     weights = None
     rescale_rot = 1.0  #LCCNet initail value = 1.0 # value did not use
     rescale_transl = 100.0  #LCCNet initatil value = 2.0 # value did not use
