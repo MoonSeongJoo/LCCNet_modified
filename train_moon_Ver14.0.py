@@ -90,10 +90,10 @@ poses_path = "data_odometry_poses"
 def config():
     checkpoints = './checkpoints/'
     dataset = 'kitti/odom' # 'kitti/raw'
-    # data_folder = "/data/kitti/kitti_odometry" #sapeon gpu sever 61
+    data_folder = "/data/kitti/kitti_odometry" #sapeon gpu sever 61 kitti odometry 
     # data_folder = "/mnt/sgvrnas/sjmoon/kitti/kitti_odometry"  # kaist gpu server 2 
     # data_folder = "/mnt/data/kitti_odometry" # KAIST GPU server 1
-    data_folder = "/mnt/sjmoon/kitti/kitti_odometry"  # sapeon desktop gpu 4090
+    # data_folder = "/mnt/sjmoon/kitti/kitti_odometry"  # sapeon desktop gpu 4090
     # data_folder = "/mnt/sjmoon/kitti/raw_data"  # sapeon desktop gpu 4090 raw data
     use_reflectance = False
     val_sequence = 7 # for kitti odometry
@@ -103,14 +103,14 @@ def config():
     loss = 'combined'
     max_t = 0.25 # 1.5, 1.0,  0.5,  0.2,  0.1
     max_r = 10.0 # 20.0, 10.0, 5.0,  2.0,  1.0
-    batch_size = 15 # 120
+    batch_size = 2 # 120
     num_worker = 10
     network = 'Res_f1'
     optimizer = 'adamW'
-    resume = False
+    resume = True
     # weights = '/home/seongjoo/work/autocalib1/considering_project/checkpoints/kitti/odom/val_seq_07/models/checkpoint_r20.00_t1.50_e19_1.885.tar'
-    # weights = './checkpoints/kitti/odom/val_seq_07/models/checkpoint_r10.00_t0.25_e1_5.929.tar'
-    weights = None
+    weights = './checkpoints/kitti/odom/val_seq_07/models/checkpoint_r10.00_t0.25_e12_5.144.tar'
+    # weights = None
     rescale_rot = 1.0  #LCCNet initail value = 1.0 # value did not use
     rescale_transl = 100.0  #LCCNet initatil value = 2.0 # value did not use
     norm = 'bn'
@@ -119,7 +119,7 @@ def config():
     weight_point_cloud = 0.1 # 이값은 무시해도 됨 loss function에서 직접 관장 원래 LCCNet initail = 0.5
     log_frequency = 1000
     print_frequency = 50
-    starting_epoch = 1
+    starting_epoch = 13
     num_kp = 100
     dense_resoltuion = 2
     local_log_frequency = 50
@@ -132,7 +132,7 @@ def config():
     all_net_init = None
 
 # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-os.environ["CUDA_VISIBLE_DEVICES"] = '0'
+os.environ["CUDA_VISIBLE_DEVICES"] = '1'
 device='cuda'
 
 EPOCH = 1
