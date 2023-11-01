@@ -36,8 +36,8 @@ from torchvision.transforms import functional as tvtf
 from sacred import Experiment
 from sacred.utils import apply_backspaces_and_linefeeds
 
-from DatasetLidarCamera_Ver12_0 import DatasetLidarCameraKittiOdometry ,DatasetLidarCameraKittiRaw
-from losses_Ver12_0 import DistancePoints3D, GeometricLoss, L1Loss, ProposedLoss, CombinedLoss
+from DatasetLidarCamera_Ver12_5 import DatasetLidarCameraKittiOdometry ,DatasetLidarCameraKittiRaw
+from losses_Ver12_5 import DistancePoints3D, GeometricLoss, L1Loss, ProposedLoss, CombinedLoss
 
 
 from quaternion_distances import quaternion_distance
@@ -47,8 +47,8 @@ from utils import (mat2xyzrpy, merge_inputs, overlay_imgs, quat2mat,
                    quaternion_from_matrix, rotate_back, rotate_forward,
                    tvector2mat)
 
-from image_processing_unit_Ver12_0 import lidar_project_depth , corr_gen , corr_gen_withZ , dense_map , colormap
-from LCCNet_COTR_moon_Ver12_1 import DepthCalibTranformer
+from image_processing_unit_Ver12_5 import lidar_project_depth , corr_gen , corr_gen_withZ , dense_map , colormap
+from LCCNet_COTR_moon_Ver12_5 import DepthCalibTranformer
 #from COTR.inference.sparse_engine_Ver3 import SparseEngine
 import warnings
 warnings.filterwarnings('ignore')
@@ -87,25 +87,26 @@ def config():
     checkpoints = './checkpoints/'
     dataset = 'kitti/odom' # 'kitti/raw'
     # data_folder = "/data/kitti/kitti_odometry" #sapeon gpu server 61
-    data_folder = "/data/kitti/raw_data" # sapeon server gpu sever61 rawdata
+    # data_folder = "/data/kitti/raw_data" # sapeon server gpu sever61 rawdata
     # data_folder = "/mnt/sgvrnas/sjmoon/kitti/kitti_odometry"  # kaist gpu server 2 
     # data_folder = "/mnt/data/kitti_odometry" # KAIST GPU server 1
     # data_folder = "/mnt/sjmoon/kitti/kitti_odometry"  # sapeon desktop gpu 4090
+    data_folder = "/mnt/sjmoon/kitti/raw_data" # sapeon desktop gpu 4090 rawdata
     use_reflectance = False
     # val_sequence = 0
     val_sequence = '2011_09_26_drive_0005_sync'
-    epochs = 1000
+    epochs = 600
     BASE_LEARNING_RATE = 1e-4 # 1e-4
     loss = 'combined'
     max_t = 0.25 # 1.5, 1.0,  0.5,  0.2,  0.1
     max_r = 10.0 # 20.0, 10.0, 5.0,  2.0,  1.0
-    batch_size = 20 # 120
+    batch_size = 15 # 120
     num_worker = 10
     network = 'Res_f1'
     optimizer = 'adamW'
     resume = True
-    # weights = '/home/seongjoo/work/autocalib1/considering_project/checkpoints/kitti/odom/val_seq_07/models/checkpoint_r20.00_t1.50_e19_1.885.tar'
-    weights = './checkpoints/kitti/odom/val_seq_00/models/checkpoint_r10.00_t0.25_e171_26.064.tar'
+    # weights = '/home/seongjoo/work/autocalib1/considering_project/checkpoints/kitti/odom/val_seq_07/models/checkpoint_r10.00_t0.25_e343_0.031.tar'
+    weights = './checkpoints/kitti/odom/val_seq_2011_09_26_drive_0005_sync/models/checkpoint_r10.00_t0.25_e362_0.143.tar'
     # weights = None
     rescale_rot = 1.0  #LCCNet initail value = 1.0 # value did not use
     rescale_transl = 100.0  #LCCNet initatil value = 2.0 # value did not use
@@ -116,7 +117,7 @@ def config():
     log_frequency = 1000
     print_frequency = 50
     starting_epoch = 1
-    num_kp = 100
+    num_kp = 50
     dense_resoltuion = 2
     local_log_frequency = 50
     ##### re-training option ########
@@ -128,7 +129,7 @@ def config():
     all_net_init = None
 
 # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-os.environ["CUDA_VISIBLE_DEVICES"] = '3'
+os.environ["CUDA_VISIBLE_DEVICES"] = '0'
 device ='cuda'
 
 EPOCH = 1
@@ -538,8 +539,8 @@ def main(_config, _run, seed):
         # scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[20, 50, 70], gamma=0.5)
     if _config['optimizer'] == 'adamW':
         optimizer = optim.AdamW(parameters, lr=_config['BASE_LEARNING_RATE'], weight_decay=4e-4)
-        # scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[200], gamma=0.5)
-        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.5)
+        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[30,100,200,300,400,500], gamma=0.5)
+        # scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.5)
         # scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=1e-3 , steps_per_epoch=10 ,epochs=_config['epochs'] , anneal_strategy ='cos')
     
     else:
@@ -807,7 +808,7 @@ def main(_config, _run, seed):
                 
                 #train_loss = train_local_loss / len(dataset_train)
                 ######### save network model for intermediate verification #####################  
-                if train_local_loss < 0.03:
+                if train_local_loss < 0.0000000001:
                     #if val_loss < BEST_VAL_LOSS:
                 #    BEST_VAL_LOSS = val_loss
                     #_run.result = BEST_VAL_LOSS
@@ -1025,7 +1026,7 @@ def main(_config, _run, seed):
    
      # SAVE
         val_loss = total_val_loss / len(dataset_val)
-        if epoch % 1 == 0 :
+        if epoch % 1 == 0 and (total_val_t / len(dataset_val)) < 8.0:
         #if val_loss < BEST_VAL_LOSS:
         #    BEST_VAL_LOSS = val_loss
             #_run.result = BEST_VAL_LOSS
@@ -1045,10 +1046,10 @@ def main(_config, _run, seed):
                 'val_loss': total_val_loss / len(dataset_val),
             }, savefilename)
             print(f'Model saved as {savefilename}')
-            if old_save_filename is not None:
-                if os.path.exists(old_save_filename):
-                    os.remove(old_save_filename)
-            old_save_filename = savefilename
+            # if old_save_filename is not None:
+            #     if os.path.exists(old_save_filename):
+            #         os.remove(old_save_filename)
+            # old_save_filename = savefilename
 
     print('full training time = %.2f HR' % ((time.time() - start_full_time) / 3600))
     return _run.result

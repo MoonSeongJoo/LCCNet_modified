@@ -113,10 +113,10 @@ class CombinedLoss(nn.Module):
         self.rescale_rot = rescale_rot
         self.transl_loss = nn.SmoothL1Loss(reduction='none')        
         
-        self.weight_corr = 20000.0
-        self.weight_point_cloud = 1.0
-        self.weight_rot = 500.0
-        self.weight_trans = 3000.0
+        self.weight_corr = 1.2
+        self.weight_point_cloud = 0.5
+        self.weight_rot = 0.5
+        self.weight_trans = 1.2
         self.loss = {} 
         
         print ( "------- devide weght rot/trans--------")

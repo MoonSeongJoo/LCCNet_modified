@@ -30,7 +30,7 @@ import time
 
 #from models.LCCNet import LCCNet
 
-from LCCNet_COTR_moon_Ver12_1 import DepthCalibTranformer , MonoDelsNet
+from LCCNet_COTR_moon_Ver12_5 import DepthCalibTranformer , MonoDelsNet
 
 from quaternion_distances import quaternion_distance
 from utils import (mat2xyzrpy, merge_inputs, overlay_imgs, quat2mat,
@@ -562,7 +562,7 @@ plt_size = 10.5
 ex = Experiment("LCCNet-evaluate-iterative",interactive = True)
 ex.captured_out_filter = apply_backspaces_and_linefeeds
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '3'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 device ='cuda'
 
 # In[6]:
@@ -574,9 +574,10 @@ def config():
     dataset = 'kitti/odom'
     # data_folder = '/mnt/data/kitti_odometry'
     # data_folder = "/data/kitti/kitti_odometry" # sapeon server gpu a100
-    data_folder = "/data/kitti/raw_data" # sapeon server gpu a100
+    # data_folder = "/data/kitti/raw_data" # sapeon server gpu a100
+    data_folder = "/mnt/sjmoon/kitti/raw_data" # sapeon desktop gpu 4090 rawdata
     # test_sequence = 0
-    test_sequence=    '2011_09_30_drive_0016_sync'  #    '2011_09_29_drive_0004_sync'   '2011_09_26_drive_0005_sync'
+    test_sequence=      '2011_09_26_drive_0005_sync'  #    '2011_09_29_drive_0004_sync'       '2011_09_30_drive_0016_sync' 
     use_prev_output = False
     max_t = 0.25
     max_r = 10.0
@@ -602,13 +603,16 @@ def config():
     outlier_filter_th = 10
     out_fig_lg = 'EN' # [EN, CN]
     dense_resoltuion = 2
-    num_kp = 100
+    num_kp = 50
 
 weights = [
-    './checkpoints/kitti/odom/val_seq_00/models/checkpoint_r10.00_t0.25_e349_0.033.tar',
+    './checkpoints/kitti/odom/val_seq_2011_09_26_drive_0005_sync/models/checkpoint_r10.00_t0.25_e362_0.143.tar',
    './checkpoints/kitti/odom/val_seq_00/models/checkpoint_r10.00_t0.25_e4_22.218.tar',
    './checkpoints/kitti/odom/val_seq_07/models/checkpoint_r7.50_t0.20_e110_0.383.tar',
    './checkpoints/kitti/odom/val_seq_07/models/checkpoint_r7.50_t0.20_e110_0.383.tar',
+
+
+   
    './checkpoints/kitti/odom/val_seq_07/models/checkpoint_r7.50_t0.20_e110_0.383.tar',
   # './checkpoints/kitti/odom/val_seq_07/models/checkpoint_r7.50_t0.20_e110_0.383.tar',
 ]

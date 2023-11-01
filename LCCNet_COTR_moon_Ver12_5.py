@@ -34,7 +34,7 @@ import easydict
 import cv2
 import sys
 import yaml
-from image_processing_unit_Ver11_7 import (lidar_project_depth , corr_gen , corr_gen_withZ , dense_map , colormap ,two_images_side_by_side ,random_mask ,draw_corrs)
+from image_processing_unit_Ver12_5 import (lidar_project_depth , corr_gen , corr_gen_withZ , dense_map , colormap ,two_images_side_by_side ,random_mask ,draw_corrs)
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '1'
 
@@ -270,11 +270,11 @@ class regressor(nn.Module) :
         # transformer encoder feature aggregration
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1)) # Global Average Pooling
         self.flatten = nn.Flatten()
-        self.linear = nn.Linear(312, 100) 
+        # self.linear = nn.Linear(312, 100) 
 
-        self.fc0_rot_aggr = nn.Linear(self.num_kp * 10 , 1024) # select numer of corresepondence matching point * 2 shape[0] # ========= number of kp (self.num_kp) * 4 ===========
+        self.fc0_rot_aggr = nn.Linear(self.num_kp*9 + 312 , 1024) # select numer of corresepondence matching point * 2 shape[0] # ========= number of kp (self.num_kp) * 4 ===========
         self.bn0_rot_aggr = nn.BatchNorm1d(1024)
-        self.fc0_tarsl_aggr = nn.Linear(self.num_kp * 10 , 1024) # select numer of corresepondence matching point * 2 shape[0] # ========= number of kp (self.num_kp) * 4 ===========
+        self.fc0_tarsl_aggr = nn.Linear(self.num_kp*9 + 312  , 1024) # select numer of corresepondence matching point * 2 shape[0] # ========= number of kp (self.num_kp) * 4 ===========
         self.bn0_tarsl_aggr = nn.BatchNorm1d(1024)
  
         self.fc0_trasl = nn.Linear(1024, 512)
@@ -290,7 +290,7 @@ class regressor(nn.Module) :
         self.fc2_trasl = nn.Linear(256, 3)
         self.fc2_rot = nn.Linear(256, 4)
 
-        self.dropout1 = nn.Dropout(0.1)
+        # self.dropout1 = nn.Dropout(0.5)
         self.dropout2 = nn.Dropout(0.5)
 
 class DepthCalibTranformer(nn.Module):
@@ -307,7 +307,7 @@ class DepthCalibTranformer(nn.Module):
         self.num_kp = num_kp
         
         # self.mono = MonoDepth() # depth estimation by monodepth2
-        self.mono = MonoDelsNet() # depth estimation by monodepth2
+        # self.mono = MonoDelsNet() # depth estimation by monodepth2
         # self.STN = STNNet()
    
         self.corr = COTR(self.num_kp)
@@ -316,26 +316,26 @@ class DepthCalibTranformer(nn.Module):
 
     def forward(self, rgb_input, depth_input , query_input ,corr_target):
 
-        rgb_pred_input = []        
+        # rgb_pred_input = []        
         
-        with torch.no_grad():
-            rgb_features, _ = self.mono.models["encoder"](rgb_input)
-            rgb_outputs  = self.mono.models["depth_decoder"](rgb_features)
+        # with torch.no_grad():
+        #     rgb_features, _ = self.mono.models["encoder"](rgb_input)
+        #     rgb_outputs  = self.mono.models["depth_decoder"](rgb_features)
             
-        rgb_depth_pred = rgb_outputs[("disp", 0)]
+        # rgb_depth_pred = rgb_outputs[("disp", 0)]
         
-        for idx in range(len(rgb_depth_pred)):
-            rgb_pred = rgb_depth_pred[idx].squeeze(0)
-            rgb_pred = colormap(rgb_pred)
-            # rgb_pred = torch.from_numpy(rgb_pred)
-            # batch stack 
-            rgb_pred_input.append(rgb_pred)
+        # for idx in range(len(rgb_depth_pred)):
+        #     rgb_pred = rgb_depth_pred[idx].squeeze(0)
+        #     rgb_pred = colormap(rgb_pred)
+        #     # rgb_pred = torch.from_numpy(rgb_pred)
+        #     # batch stack 
+        #     rgb_pred_input.append(rgb_pred)
         
-        rgb_pred_input = torch.stack(rgb_pred_input)
+        # rgb_pred_input = torch.stack(rgb_pred_input)
         
-        rgb_pred_input = rgb_pred_input.permute(0,2,3,1)
-        rgb_pred_input = rgb_pred_input.type(torch.float32)
-        depth_input = depth_input.type(torch.float32)
+        # rgb_pred_input = rgb_pred_input.permute(0,2,3,1)
+        # rgb_pred_input = rgb_pred_input.type(torch.float32)
+        # depth_input = depth_input.type(torch.float32)
         
         # Spatial Transformer Network forwarding pass
         # 입력을 변환
@@ -343,7 +343,7 @@ class DepthCalibTranformer(nn.Module):
         rgb_input = rgb_input.permute(0,2,3,1)
         depth_input = depth_input.permute(0,2,3,1)
         
-        sbs_img = two_images_side_by_side(rgb_pred_input, depth_input)
+        sbs_img = two_images_side_by_side(rgb_input, depth_input)
         sbs_img = torch.from_numpy(sbs_img).permute(0,3,1,2).to(device)
         sbs_img = tvtf.normalize(sbs_img, (0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
 
@@ -407,19 +407,19 @@ class DepthCalibTranformer(nn.Module):
 
         x = self.regressor.avgpool(enc_out)        
         x = self.regressor.flatten(x)
-        x = self.regressor.linear(x) # now x has shape [batch_size=1 ,feature_emb_dim_100]
+        # x = self.regressor.linear(x) # now x has shape [batch_size=1 ,feature_emb_dim_100]
         y=corrs_emb.view(corrs_emb.size(0),-1) 
 
         feature_emb=torch.cat((x,y),dim=-1) 
 
-        x = self.regressor.mish(feature_emb)
-        x = x.view(x.shape[0], -1)
-        x = self.regressor.dropout1(x)
+        # feature_emb = self.regressor.mish(feature_emb)
+        # feature_emb = feature_emb.view(feature_emb.shape[0], -1)
+        # feature_emb = self.regressor.dropout1(feature_emb)
         # x = x.to('cuda')
         # x = x.float()
-        aggr_rot_x = self.regressor.mish(self.regressor.fc0_rot_aggr(x))
+        aggr_rot_x = self.regressor.mish(self.regressor.fc0_rot_aggr(feature_emb))
         aggr_rot_x = self.regressor.dropout2(aggr_rot_x)
-        aggr_transl_x = self.regressor.mish(self.regressor.fc0_tarsl_aggr(x))
+        aggr_transl_x = self.regressor.mish(self.regressor.fc0_tarsl_aggr(feature_emb))
         aggr_transl_x = self.regressor.dropout2(aggr_transl_x)
 
         transl = self.regressor.mish(self.regressor.fc0_trasl(aggr_transl_x))
